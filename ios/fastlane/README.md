@@ -23,14 +23,6 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 Deploy a build for beta testing
 
-### ios bootstrap_cocoapods
-
-```sh
-[bundle exec] fastlane ios bootstrap_cocoapods
-```
-
-Install cocoapods dependencies
-
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
