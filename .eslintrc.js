@@ -2,7 +2,7 @@ module.exports = {
 	settings: {
 		'import/resolver': {
 			node: {
-				extensions: ['.ts', '.tsx', '.js', '.ios.js', '.android.js', '.native.js']
+				extensions: ['.ts', '.tsx', '.js', '.ios.js', '.android.js', '.native.js', '.ios.tsx', '.android.tsx']
 			}
 		}
 	},
@@ -17,14 +17,15 @@ module.exports = {
 			legacyDecorators: true
 		}
 	},
-	plugins: ['react', 'jsx-a11y', 'import', 'react-native', '@babel'],
+	plugins: ['react', 'jsx-a11y', 'import', 'react-native', '@babel', 'jest', 'react-hooks'],
 	env: {
 		browser: true,
 		commonjs: true,
 		es6: true,
 		node: true,
 		jquery: true,
-		mocha: true
+		mocha: true,
+		'jest/globals': true
 	},
 	rules: {
 		'import/extensions': [
@@ -147,28 +148,14 @@ module.exports = {
 		'no-async-promise-executor': [0],
 		'max-classes-per-file': [0],
 		'no-multiple-empty-lines': [0],
-		'no-sequences': 'off'
+		'no-sequences': 'off',
+		'react-hooks/rules-of-hooks': 'error',
+		'react-hooks/exhaustive-deps': 'warn'
 	},
 	globals: {
 		__DEV__: true
 	},
 	overrides: [
-		{
-			files: ['e2e/**'],
-			globals: {
-				by: true,
-				detox: true,
-				device: true,
-				element: true,
-				expect: true,
-				waitFor: true
-			},
-			rules: {
-				'import/no-extraneous-dependencies': 0,
-				'no-await-in-loop': 0,
-				'no-restricted-syntax': 0
-			}
-		},
 		{
 			files: ['**/*.ts', '**/*.tsx'],
 			extends: [
@@ -236,7 +223,9 @@ module.exports = {
 					}
 				],
 				'new-cap': 'off',
-				'lines-between-class-members': 'off'
+				'lines-between-class-members': 'off',
+				'react-hooks/rules-of-hooks': 'error',
+				'react-hooks/exhaustive-deps': 'warn'
 			},
 			globals: {
 				JSX: true
@@ -247,6 +236,12 @@ module.exports = {
 						extensions: ['.js', '.ts', '.tsx']
 					}
 				}
+			}
+		},
+		{
+			files: ['e2e/**'],
+			rules: {
+				'no-await-in-loop': 0
 			}
 		}
 	]

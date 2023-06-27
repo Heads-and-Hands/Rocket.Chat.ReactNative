@@ -1,12 +1,13 @@
 import React, { PureComponent } from 'react';
 import { Animated, Easing, Switch, Text, TouchableWithoutFeedback, View } from 'react-native';
 
-import Touch from '../../utils/touch';
-import { CustomIcon } from '../../lib/Icons';
+import Touch from '../../containers/Touch';
+import { CustomIcon, TIconsName } from '../../containers/CustomIcon';
 import Check from '../../containers/Check';
 import I18n from '../../i18n';
-import { SWITCH_TRACK_COLOR, themes } from '../../constants/colors';
+import { SWITCH_TRACK_COLOR, themes } from '../../lib/constants';
 import styles from './styles';
+import { TSupportedThemes } from '../../theme';
 
 const ANIMATION_DURATION = 200;
 const ANIMATION_PROPS = {
@@ -22,7 +23,7 @@ interface IDirectoryOptionsProps {
 	close: Function;
 	changeType: Function;
 	toggleWorkspace(): void;
-	theme: string;
+	theme: TSupportedThemes;
 }
 
 export default class DirectoryOptions extends PureComponent<IDirectoryOptionsProps, any> {
@@ -51,7 +52,7 @@ export default class DirectoryOptions extends PureComponent<IDirectoryOptionsPro
 	renderItem = (itemType: string) => {
 		const { changeType, type: propType, theme } = this.props;
 		let text = 'Users';
-		let icon = 'user';
+		let icon: TIconsName = 'user';
 		if (itemType === 'channels') {
 			text = 'Channels';
 			icon = 'channel-public';
@@ -63,15 +64,11 @@ export default class DirectoryOptions extends PureComponent<IDirectoryOptionsPro
 		}
 
 		return (
-			<Touch
-				onPress={() => changeType(itemType)}
-				style={styles.dropdownItemButton}
-				theme={theme}
-				accessibilityLabel={I18n.t(text)}>
+			<Touch onPress={() => changeType(itemType)} style={styles.dropdownItemButton} accessibilityLabel={I18n.t(text)}>
 				<View style={styles.dropdownItemContainer}>
-					<CustomIcon style={[styles.dropdownItemIcon, { color: themes[theme].bodyText }]} size={22} name={icon} />
+					<CustomIcon name={icon} size={22} color={themes[theme].bodyText} style={styles.dropdownItemIcon} />
 					<Text style={[styles.dropdownItemText, { color: themes[theme].bodyText }]}>{I18n.t(text)}</Text>
-					{propType === itemType ? <Check theme={theme} /> : null}
+					{propType === itemType ? <Check /> : null}
 				</View>
 			</Touch>
 		);
@@ -93,19 +90,22 @@ export default class DirectoryOptions extends PureComponent<IDirectoryOptionsPro
 					<Animated.View style={[styles.backdrop, { backgroundColor: themes[theme].backdropColor, opacity: backdropOpacity }]} />
 				</TouchableWithoutFeedback>
 				<Animated.View
-					style={[styles.dropdownContainer, { transform: [{ translateY }], backgroundColor: themes[theme].backgroundColor }]}>
-					<Touch onPress={this.close} theme={theme} accessibilityLabel={I18n.t('Search_by')}>
+					style={[styles.dropdownContainer, { transform: [{ translateY }], backgroundColor: themes[theme].backgroundColor }]}
+				>
+					<Touch onPress={this.close} accessibilityLabel={I18n.t('Search_by')}>
 						<View
 							style={[
 								styles.dropdownContainerHeader,
 								styles.dropdownItemContainer,
 								{ borderColor: themes[theme].separatorColor }
-							]}>
+							]}
+						>
 							<Text style={[styles.dropdownToggleText, { color: themes[theme].auxiliaryText }]}>{I18n.t('Search_by')}</Text>
 							<CustomIcon
-								style={[styles.dropdownItemIcon, styles.inverted, { color: themes[theme].auxiliaryTintColor }]}
+								style={[styles.dropdownItemIcon, styles.inverted]}
 								size={22}
 								name='chevron-down'
+								color={themes[theme].auxiliaryTintColor}
 							/>
 						</View>
 					</Touch>

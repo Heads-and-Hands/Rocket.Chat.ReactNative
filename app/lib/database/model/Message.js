@@ -3,10 +3,10 @@ import { date, field, json, relation } from '@nozbe/watermelondb/decorators';
 
 import { sanitizer } from '../utils';
 
-export const TABLE_NAME = 'messages';
+export const MESSAGES_TABLE = 'messages';
 
 export default class Message extends Model {
-	static table = TABLE_NAME;
+	static table = MESSAGES_TABLE;
 
 	static associations = {
 		subscriptions: { type: 'belongs_to', key: 'rid' }
@@ -83,4 +83,49 @@ export default class Message extends Model {
 	@field('tshow') tshow;
 
 	@json('md', sanitizer) md;
+
+	@field('comment') comment;
+
+	asPlain() {
+		return {
+			id: this.id,
+			rid: this.subscription.id,
+			msg: this.msg,
+			t: this.t,
+			ts: this.ts,
+			u: this.u,
+			alias: this.alias,
+			parseUrls: this.parseUrls,
+			groupable: this.groupable,
+			avatar: this.avatar,
+			emoji: this.emoji,
+			attachments: this.attachments,
+			urls: this.urls,
+			_updatedAt: this._updatedAt,
+			status: this.status,
+			pinned: this.pinned,
+			starred: this.starred,
+			editedBy: this.editedBy,
+			reactions: this.reactions,
+			role: this.role,
+			drid: this.drid,
+			dcount: this.dcount,
+			dlm: this.dlm,
+			tmid: this.tmid,
+			tcount: this.tcount,
+			tlm: this.tlm,
+			replies: this.replies,
+			mentions: this.mentions,
+			channels: this.channels,
+			unread: this.unread,
+			autoTranslate: this.autoTranslate,
+			translations: this.translations,
+			tmsg: this.tmsg,
+			blocks: this.blocks,
+			e2e: this.e2e,
+			tshow: this.tshow,
+			md: this.md,
+			comment: this.comment
+		};
+	}
 }

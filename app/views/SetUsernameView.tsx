@@ -1,26 +1,28 @@
-import React from 'react';
-import { StackNavigationOptions, StackNavigationProp } from '@react-navigation/stack';
-import { Dispatch } from 'redux';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
-import { connect } from 'react-redux';
 import Orientation from 'react-native-orientation-locker';
-import { RouteProp } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+import { useForm } from 'react-hook-form';
+import * as yup from 'yup';
+import { yupResolver } from '@hookform/resolvers/yup';
 
-import { loginRequest as loginRequestAction } from '../actions/login';
-import TextInput from '../containers/TextInput';
+import { loginRequest } from '../actions/login';
 import Button from '../containers/Button';
-import KeyboardView from '../presentation/KeyboardView';
-import scrollPersistTaps from '../utils/scrollPersistTaps';
-import I18n from '../i18n';
-import RocketChat from '../lib/rocketchat';
-import StatusBar from '../containers/StatusBar';
-import { withTheme } from '../theme';
-import { themes } from '../constants/colors';
-import { isTablet } from '../utils/deviceInfo';
-import { getUserSelector } from '../selectors/login';
-import { showErrorAlert } from '../utils/info';
 import SafeAreaView from '../containers/SafeAreaView';
+import StatusBar from '../containers/StatusBar';
+import { ControlledFormTextInput } from '../containers/TextInput';
+import { SetUsernameStackParamList } from '../definitions/navigationTypes';
+import I18n from '../i18n';
+import KeyboardView from '../containers/KeyboardView';
+import { getUserSelector } from '../selectors/login';
+import { useTheme } from '../theme';
+import { isTablet, showErrorAlert } from '../lib/methods/helpers';
+import scrollPersistTaps from '../lib/methods/helpers/scrollPersistTaps';
 import sharedStyles from './Styles';
+import { Services } from '../lib/services';
+import { useAppSelector } from '../lib/hooks';
 
 const styles = StyleSheet.create({
 	loginTitle: {
@@ -29,128 +31,94 @@ const styles = StyleSheet.create({
 	}
 });
 
-interface ISetUsernameViewState {
+interface ISubmit {
 	username: string;
-	saving: boolean;
 }
 
-interface ISetUsernameViewProps {
-	navigation: StackNavigationProp<any, 'SetUsernameView'>;
-	route: RouteProp<{ SetUsernameView: { title: string } }, 'SetUsernameView'>;
-	server: string;
-	userId: string;
-	loginRequest: ({ resume }: { resume: string }) => void;
-	token: string;
-	theme: string;
-}
+const schema = yup.object().shape({
+	username: yup.string().required()
+});
 
-class SetUsernameView extends React.Component<ISetUsernameViewProps, ISetUsernameViewState> {
-	static navigationOptions = ({ route }: Pick<ISetUsernameViewProps, 'route'>): StackNavigationOptions => ({
-		title: route.params?.title
-	});
+const SetUsernameView = () => {
+	const {
+		control,
+		handleSubmit,
+		formState: { isValid },
+		setValue
+	} = useForm<ISubmit>({ mode: 'onChange', resolver: yupResolver(schema) });
+	const [loading, setLoading] = useState(false);
 
-	constructor(props: ISetUsernameViewProps) {
-		super(props);
-		this.state = {
-			username: '',
-			saving: false
-		};
-		const { server } = this.props;
-		props.navigation.setOptions({ title: server });
+	const { colors } = useTheme();
+	const dispatch = useDispatch();
+	const { server, token } = useAppSelector(state => ({ server: state.server.server, token: getUserSelector(state).token }));
+
+	const navigation = useNavigation<StackNavigationProp<SetUsernameStackParamList, 'SetUsernameView'>>();
+
+	useLayoutEffect(() => {
+		navigation.setOptions({ title: server });
 		if (!isTablet) {
 			Orientation.lockToPortrait();
 		}
-	}
+	}, [navigation, server]);
 
-	async componentDidMount() {
-		const suggestion = await RocketChat.getUsernameSuggestion();
-		if (suggestion.success) {
-			this.setState({ username: suggestion.result });
-		}
-	}
+	useEffect(() => {
+		const init = async () => {
+			const suggestion = await Services.getUsernameSuggestion();
+			if (suggestion.success) {
+				setValue('username', suggestion.result, { shouldValidate: true });
+			}
+		};
+		init();
+	}, []);
 
-	shouldComponentUpdate(nextProps: ISetUsernameViewProps, nextState: ISetUsernameViewState) {
-		const { username, saving } = this.state;
-		const { theme } = this.props;
-		if (nextProps.theme !== theme) {
-			return true;
-		}
-		if (nextState.username !== username) {
-			return true;
-		}
-		if (nextState.saving !== saving) {
-			return true;
-		}
-		return false;
-	}
-
-	submit = async () => {
-		const { username } = this.state;
-		const { loginRequest, token } = this.props;
-
-		if (!username.trim()) {
+	const submit = async ({ username }: ISubmit) => {
+		if (!isValid) {
 			return;
 		}
-
-		this.setState({ saving: true });
+		setLoading(true);
 		try {
-			await RocketChat.saveUserProfile({ username });
-			await loginRequest({ resume: token });
+			await Services.saveUserProfile({ username });
+			dispatch(loginRequest({ resume: token }));
 		} catch (e: any) {
 			showErrorAlert(e.message, I18n.t('Oops'));
 		}
-		this.setState({ saving: false });
+		setLoading(false);
 	};
 
-	render() {
-		const { username, saving } = this.state;
-		const { theme } = this.props;
-		return (
-			<KeyboardView style={{ backgroundColor: themes[theme].auxiliaryBackground }} contentContainerStyle={sharedStyles.container}>
-				<StatusBar />
-				<ScrollView {...scrollPersistTaps} contentContainerStyle={sharedStyles.containerScrollView}>
-					<SafeAreaView testID='set-username-view'>
-						<Text style={[sharedStyles.loginTitle, sharedStyles.textBold, styles.loginTitle, { color: themes[theme].titleText }]}>
-							{I18n.t('Username')}
-						</Text>
-						<Text style={[sharedStyles.loginSubtitle, sharedStyles.textRegular, { color: themes[theme].titleText }]}>
-							{I18n.t('Set_username_subtitle')}
-						</Text>
-						<TextInput
-							autoFocus
-							placeholder={I18n.t('Username')}
-							returnKeyType='send'
-							onChangeText={value => this.setState({ username: value })}
-							value={username}
-							onSubmitEditing={this.submit}
-							testID='set-username-view-input'
-							clearButtonMode='while-editing'
-							containerStyle={sharedStyles.inputLastChild}
-							theme={theme}
-						/>
-						<Button
-							title={I18n.t('Register')}
-							type='primary'
-							onPress={this.submit}
-							testID='set-username-view-submit'
-							disabled={!username}
-							loading={saving}
-							theme={theme}
-						/>
-					</SafeAreaView>
-				</ScrollView>
-			</KeyboardView>
-		);
-	}
-}
+	return (
+		<KeyboardView style={{ backgroundColor: colors.auxiliaryBackground }} contentContainerStyle={sharedStyles.container}>
+			<StatusBar />
+			<ScrollView {...scrollPersistTaps} contentContainerStyle={sharedStyles.containerScrollView}>
+				<SafeAreaView testID='set-username-view'>
+					<Text style={[sharedStyles.loginTitle, sharedStyles.textBold, styles.loginTitle, { color: colors.titleText }]}>
+						{I18n.t('Username')}
+					</Text>
+					<Text style={[sharedStyles.loginSubtitle, sharedStyles.textRegular, { color: colors.titleText }]}>
+						{I18n.t('Set_username_subtitle')}
+					</Text>
+					<ControlledFormTextInput
+						control={control}
+						name='username'
+						autoFocus
+						placeholder={I18n.t('Username')}
+						returnKeyType='send'
+						onSubmitEditing={handleSubmit(submit)}
+						testID='set-username-view-input'
+						clearButtonMode='while-editing'
+						containerStyle={sharedStyles.inputLastChild}
+					/>
+					<Button
+						title={I18n.t('Register')}
+						type='primary'
+						onPress={handleSubmit(submit)}
+						testID='set-username-view-submit'
+						disabled={!isValid}
+						loading={loading}
+					/>
+				</SafeAreaView>
+			</ScrollView>
+		</KeyboardView>
+	);
+};
 
-const mapStateToProps = (state: any) => ({
-	server: state.server.server,
-	token: getUserSelector(state).token
-});
-
-const mapDispatchToProps = (dispatch: Dispatch) => ({
-	loginRequest: (params: { resume: string }) => dispatch(loginRequestAction(params))
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(withTheme(SetUsernameView));
+export default SetUsernameView;

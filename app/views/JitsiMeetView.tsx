@@ -1,143 +1,105 @@
+import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import JitsiMeet, { JitsiMeetView as RNJitsiMeetView } from 'react-native-jitsi-meet';
-import BackgroundTimer from 'react-native-background-timer';
-import { connect } from 'react-redux';
+import { BackHandler, Linking, NativeEventSubscription, SafeAreaView } from 'react-native';
+import WebView from 'react-native-webview';
+import { WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
 
-import RocketChat from '../lib/rocketchat';
-import { getUserSelector } from '../selectors/login';
-import ActivityIndicator from '../containers/ActivityIndicator';
-import { events, logEvent } from '../utils/log';
-import { isAndroid, isIOS } from '../utils/deviceInfo';
+import { IBaseScreen } from '../definitions';
+import { userAgent } from '../lib/constants';
+import { isIOS } from '../lib/methods/helpers';
+import { getRoomIdFromJitsiCallUrl } from '../lib/methods/helpers/getRoomIdFromJitsiCall';
+import { events, logEvent } from '../lib/methods/helpers/log';
+import { endVideoConfTimer, initVideoConfTimer } from '../lib/methods/videoConfTimer';
+import { ChatsStackParamList } from '../stacks/types';
 import { withTheme } from '../theme';
-import { InsideStackParamList } from '../stacks/types';
 
-const formatUrl = (url: string, baseUrl: string, uriSize: number, avatarAuthURLFragment: string) =>
-	`${baseUrl}/avatar/${url}?format=png&width=${uriSize}&height=${uriSize}${avatarAuthURLFragment}`;
+type TJitsiMeetViewProps = IBaseScreen<ChatsStackParamList, 'JitsiMeetView'>;
 
-interface IJitsiMeetViewState {
-	userInfo: {
-		displayName: string;
-		avatar: string;
-	};
-	loading: boolean;
-}
-
-interface IJitsiMeetViewProps {
-	navigation: StackNavigationProp<InsideStackParamList, 'JitsiMeetView'>;
-	route: RouteProp<InsideStackParamList, 'JitsiMeetView'>;
-	baseUrl: string;
-	theme: string;
-	user: {
-		id: string;
-		username: string;
-		name: string;
-		token: string;
-	};
-}
-
-class JitsiMeetView extends React.Component<IJitsiMeetViewProps, IJitsiMeetViewState> {
+class JitsiMeetView extends React.Component<TJitsiMeetViewProps> {
 	private rid: string;
 	private url: string;
-	private jitsiTimeout: number | null;
+	private videoConf: boolean;
+	private backHandler!: NativeEventSubscription;
 
-	constructor(props: IJitsiMeetViewProps) {
+	constructor(props: TJitsiMeetViewProps) {
 		super(props);
 		this.rid = props.route.params?.rid;
 		this.url = props.route.params?.url;
-		this.jitsiTimeout = null;
-
-		const { user, baseUrl } = props;
-		const { name: displayName, id: userId, token, username } = user;
-		const avatarAuthURLFragment = `&rc_token=${token}&rc_uid=${userId}`;
-		const avatar = formatUrl(username, baseUrl, 100, avatarAuthURLFragment);
-		this.state = {
-			userInfo: {
-				displayName,
-				avatar
-			},
-			loading: true
-		};
+		this.videoConf = !!props.route.params?.videoConf;
 	}
 
 	componentDidMount() {
-		const { route } = this.props;
-		const { userInfo } = this.state;
-
-		if (isIOS) {
-			setTimeout(() => {
-				const onlyAudio = route.params?.onlyAudio ?? false;
-				if (onlyAudio) {
-					JitsiMeet.audioCall(this.url, userInfo);
-				} else {
-					JitsiMeet.call(this.url, userInfo);
-				}
-			}, 1000);
-		}
+		this.handleJitsiApp();
+		this.onConferenceJoined();
+		activateKeepAwake();
 	}
 
 	componentWillUnmount() {
-		logEvent(events.JM_CONFERENCE_TERMINATE);
-		if (this.jitsiTimeout) {
-			BackgroundTimer.clearInterval(this.jitsiTimeout);
-			this.jitsiTimeout = null;
-			BackgroundTimer.stopBackgroundTimer();
+		logEvent(this.videoConf ? events.LIVECHAT_VIDEOCONF_TERMINATE : events.JM_CONFERENCE_TERMINATE);
+		if (!this.videoConf) {
+			endVideoConfTimer();
 		}
-		JitsiMeet.endCall();
+		if (this.backHandler) {
+			this.backHandler.remove();
+		}
+		deactivateKeepAwake();
 	}
 
-	onConferenceWillJoin = () => {
-		this.setState({ loading: false });
+	handleJitsiApp = async () => {
+		const { route, navigation } = this.props;
+		const callUrl = route.params.url.replace(/^https?:\/\//, '');
+		try {
+			await Linking.openURL(`org.jitsi.meet://${callUrl}`);
+			navigation.pop();
+		} catch (error) {
+			// As the jitsi app was not opened disable the backhandler on android
+			this.backHandler = BackHandler.addEventListener('hardwareBackPress', () => true);
+		}
 	};
 
 	// Jitsi Update Timeout needs to be called every 10 seconds to make sure
 	// call is not ended and is available to web users.
 	onConferenceJoined = () => {
-		logEvent(events.JM_CONFERENCE_JOIN);
-		if (this.rid) {
-			RocketChat.updateJitsiTimeout(this.rid).catch((e: unknown) => console.log(e));
-			if (this.jitsiTimeout) {
-				BackgroundTimer.clearInterval(this.jitsiTimeout);
-				BackgroundTimer.stopBackgroundTimer();
-				this.jitsiTimeout = null;
-			}
-			this.jitsiTimeout = BackgroundTimer.setInterval(() => {
-				RocketChat.updateJitsiTimeout(this.rid).catch((e: unknown) => console.log(e));
-			}, 10000);
+		logEvent(this.videoConf ? events.LIVECHAT_VIDEOCONF_JOIN : events.JM_CONFERENCE_JOIN);
+		if (this.rid && !this.videoConf) {
+			initVideoConfTimer(this.rid);
 		}
 	};
 
-	onConferenceTerminated = () => {
-		logEvent(events.JM_CONFERENCE_TERMINATE);
-		const { navigation } = this.props;
-		navigation.pop();
+	onNavigationStateChange = (webViewState: WebViewNavigation) => {
+		const { navigation, route } = this.props;
+
+		const roomId = getRoomIdFromJitsiCallUrl(route.params.url);
+
+		if ((roomId && !webViewState.url.includes(roomId)) || webViewState.url.includes('close')) {
+			if (isIOS) {
+				if (webViewState.navigationType) {
+					navigation.pop();
+				}
+			} else {
+				navigation.pop();
+			}
+		}
 	};
 
 	render() {
-		const { userInfo, loading } = this.state;
-		const { route, theme } = this.props;
-		const onlyAudio = route.params?.onlyAudio ?? false;
-		const options = isAndroid ? { url: this.url, userInfo, audioOnly: onlyAudio } : null;
+		const uri = `${this.url}${this.url.includes('#config') ? '&' : '#'}config.disableDeepLinking=true`;
 		return (
-			<>
-				<RNJitsiMeetView
-					onConferenceWillJoin={this.onConferenceWillJoin}
-					onConferenceTerminated={this.onConferenceTerminated}
-					onConferenceJoined={this.onConferenceJoined}
-					style={StyleSheet.absoluteFill}
-					options={options}
+			<SafeAreaView style={{ flex: 1 }}>
+				<WebView
+					source={{ uri: uri.replace(/"/g, "'") }}
+					onNavigationStateChange={this.onNavigationStateChange}
+					// Jitsi default background color
+					style={{ flex: 1, backgroundColor: 'rgb(62,62,62)' }}
+					userAgent={userAgent}
+					javaScriptEnabled
+					domStorageEnabled
+					mediaPlaybackRequiresUserAction={false}
+					mediaCapturePermissionGrantType={'grant'}
 				/>
-				{loading ? <ActivityIndicator theme={theme} /> : null}
-			</>
+			</SafeAreaView>
 		);
 	}
 }
 
-const mapStateToProps = (state: any) => ({
-	user: getUserSelector(state),
-	baseUrl: state.server.server
-});
-
-export default connect(mapStateToProps)(withTheme(JitsiMeetView));
+export default withTheme(JitsiMeetView);

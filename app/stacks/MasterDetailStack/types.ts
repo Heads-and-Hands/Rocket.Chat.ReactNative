@@ -3,18 +3,21 @@ import { NavigatorScreenParams } from '@react-navigation/core';
 
 import { IAttachment } from '../../definitions/IAttachment';
 import { IMessage } from '../../definitions/IMessage';
-import { IRoom, RoomType } from '../../definitions/IRoom';
+import { ISubscription, SubscriptionType, TSubscriptionModel } from '../../definitions/ISubscription';
+import { ILivechatDepartment } from '../../definitions/ILivechatDepartment';
+import { ILivechatTag } from '../../definitions/ILivechatTag';
+import { TChangeAvatarViewContext } from '../../definitions/TChangeAvatarViewContext';
 
 export type MasterDetailChatsStackParamList = {
 	RoomView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		tmid?: string;
 		message?: string;
 		name?: string;
 		fname?: string;
 		prid?: string;
-		room: IRoom;
+		room: ISubscription;
 		jumpToMessageId?: string;
 		jumpToThreadId?: string;
 		roomUserId?: string;
@@ -27,38 +30,56 @@ export type MasterDetailDrawerParamList = {
 
 export type ModalStackParamList = {
 	RoomActionsView: {
-		room: IRoom;
-		member: any;
+		room: ISubscription;
+		member?: any;
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		joined: boolean;
+		omnichannelPermissions?: {
+			canForwardGuest: boolean;
+			canReturnQueue: boolean;
+			canViewCannedResponse: boolean;
+			canPlaceLivechatOnHold: boolean;
+		};
 	};
 	RoomInfoView: {
-		room: IRoom;
+		room: ISubscription;
 		member: any;
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
+		showCloseModal?: boolean;
 	};
 	SelectListView: {
 		data: any;
 		title: string;
 		infoText: string;
 		nextAction: Function;
-		showAlert: boolean;
-		isSearch: boolean;
-		onSearch: Function;
+		showAlert?: () => void | boolean;
+		isSearch?: boolean;
+		onSearch?: Function;
 		isRadio?: boolean;
+	};
+	ChangeAvatarView: {
+		context: TChangeAvatarViewContext;
+		titleHeader?: string;
+		room?: ISubscription;
+		t?: SubscriptionType;
 	};
 	RoomInfoEditView: {
 		rid: string;
 	};
 	RoomMembersView: {
 		rid: string;
-		room: IRoom;
+		room: TSubscriptionModel;
+		joined?: boolean;
+	};
+	DiscussionsView: {
+		rid: string;
+		t: SubscriptionType;
 	};
 	SearchMessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		encrypted?: boolean;
 		showCloseModal?: boolean;
 	};
@@ -84,21 +105,27 @@ export type ModalStackParamList = {
 	};
 	MessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		name: string;
 	};
 	AutoTranslateView: {
 		rid: string;
-		room: IRoom;
+		room: ISubscription;
 	};
 	DirectoryView: undefined;
 	QueueListView: undefined;
 	NotificationPrefView: {
 		rid: string;
-		room: IRoom;
+		room: ISubscription;
 	};
 	ForwardLivechatView: {
 		rid: string;
+	};
+	CloseLivechatView: {
+		rid: string;
+		departmentId?: string;
+		departmentInfo?: ILivechatDepartment;
+		tagsList?: ILivechatTag[];
 	};
 	CannedResponsesListView: {
 		rid: string;
@@ -110,10 +137,10 @@ export type ModalStackParamList = {
 			scopeName: string;
 			tags: string[];
 		};
-		room: IRoom;
+		room: ISubscription;
 	};
 	LivechatEditView: {
-		room: IRoom;
+		room: ISubscription;
 		roomUser: any; // TODO: Change
 	};
 	PickerView: {
@@ -126,10 +153,11 @@ export type ModalStackParamList = {
 	};
 	ThreadMessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 	};
 	TeamChannelsView: {
 		teamId: string;
+		joined: boolean;
 	};
 	MarkdownTableView: {
 		renderRows: Function;
@@ -160,7 +188,7 @@ export type ModalStackParamList = {
 		teamId?: string;
 	};
 	CreateDiscussionView: {
-		channel: IRoom;
+		channel: ISubscription;
 		message: IMessage;
 		showCloseModal: boolean;
 	};
@@ -194,7 +222,7 @@ export type MasterDetailInsideStackParamList = {
 		isShareView?: boolean;
 		serverInfo: {};
 		text: string;
-		room: IRoom;
+		room: ISubscription;
 		thread: any; // TODO: Change
 	};
 };

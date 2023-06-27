@@ -5,15 +5,17 @@ import Touchable from './Touchable';
 import { BUTTON_HIT_SLOP, formatMessageCount } from './utils';
 import styles from './styles';
 import I18n from '../../i18n';
-import { CustomIcon } from '../../lib/Icons';
+import { CustomIcon } from '../CustomIcon';
 import { DISCUSSION } from './constants';
-import { themes } from '../../constants/colors';
+import { themes } from '../../lib/constants';
 import MessageContext from './Context';
-import { formatDateThreads } from '../../utils/room';
-import { IMessageDiscussion } from './interfaces';
+import { formatDateThreads } from '../../lib/methods/helpers/room';
+import { IMessage } from '../../definitions';
+import { useTheme } from '../../theme';
 
 const Discussion = React.memo(
-	({ msg, dcount, dlm, theme }: IMessageDiscussion) => {
+	({ msg, dcount, dlm }: Pick<IMessage, 'msg' | 'dcount' | 'dlm'>) => {
+		const { theme } = useTheme();
 		let time;
 		if (dlm) {
 			time = formatDateThreads(dlm);
@@ -29,7 +31,8 @@ const Discussion = React.memo(
 						onPress={onDiscussionPress}
 						background={Touchable.Ripple(themes[theme].bannerBackground)}
 						style={[styles.button, { backgroundColor: themes[theme].tintColor }]}
-						hitSlop={BUTTON_HIT_SLOP}>
+						hitSlop={BUTTON_HIT_SLOP}
+					>
 						<>
 							<CustomIcon name='discussions' size={16} style={styles.buttonIcon} color={themes[theme].buttonText} />
 							<Text style={[styles.buttonText, { color: themes[theme].buttonText }]}>{buttonText}</Text>
@@ -48,9 +51,6 @@ const Discussion = React.memo(
 			return false;
 		}
 		if (prevProps.dlm !== nextProps.dlm) {
-			return false;
-		}
-		if (prevProps.theme !== nextProps.theme) {
 			return false;
 		}
 		return true;

@@ -3,12 +3,13 @@ import { FlatList, Image, StyleSheet, View } from 'react-native';
 import { RectButton, TouchableNativeFeedback, TouchableOpacity } from 'react-native-gesture-handler';
 
 import { BUTTON_HIT_SLOP } from '../../containers/message/utils';
-import { themes } from '../../constants/colors';
-import { CustomIcon } from '../../lib/Icons';
-import { isIOS } from '../../utils/deviceInfo';
+import { themes } from '../../lib/constants';
+import { CustomIcon } from '../../containers/CustomIcon';
+import { isIOS } from '../../lib/methods/helpers';
 import { THUMBS_HEIGHT } from './constants';
 import { allowPreview } from './utils';
-import { IAttachment } from './interfaces';
+import { TSupportedThemes } from '../../theme';
+import { IShareAttachment } from '../../definitions';
 
 const THUMB_SIZE = 64;
 
@@ -51,7 +52,7 @@ const styles = StyleSheet.create({
 	thumb: {
 		width: THUMB_SIZE,
 		height: THUMB_SIZE,
-		borderRadius: 2,
+		borderRadius: 4,
 		marginRight: 16,
 		overflow: 'hidden',
 		alignItems: 'center',
@@ -61,18 +62,18 @@ const styles = StyleSheet.create({
 });
 
 interface IThumbContent {
-	item: IAttachment;
-	theme: string;
+	item: IShareAttachment;
+	theme: TSupportedThemes;
 	isShareExtension: boolean;
 }
 
 interface IThumb extends IThumbContent {
-	onPress(item: IAttachment): void;
-	onRemove(item: IAttachment): void;
+	onPress(item: IShareAttachment): void;
+	onRemove(item: IShareAttachment): void;
 }
 
 interface IThumbs extends Omit<IThumb, 'item'> {
-	attachments: IAttachment[];
+	attachments: IShareAttachment[];
 }
 
 const ThumbContent = React.memo(({ item, theme, isShareExtension }: IThumbContent) => {
@@ -122,7 +123,8 @@ const Thumb = ({ item, theme, isShareExtension, onPress, onRemove }: IThumb) => 
 				style={[styles.removeButton, { backgroundColor: themes[theme].bodyText, borderColor: themes[theme].auxiliaryBackground }]}
 				activeOpacity={1}
 				rippleColor={themes[theme].bannerBackground}
-				onPress={() => onRemove(item)}>
+				onPress={() => onRemove(item)}
+			>
 				<View style={[styles.removeView, { borderColor: themes[theme].auxiliaryBackground }]}>
 					<CustomIcon name='close' color={themes[theme].backgroundColor} size={14} />
 				</View>

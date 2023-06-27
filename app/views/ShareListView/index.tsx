@@ -9,74 +9,58 @@ import { dequal } from 'dequal';
 import { Q } from '@nozbe/watermelondb';
 
 import database from '../../lib/database';
-import { isAndroid, isIOS } from '../../utils/deviceInfo';
 import I18n from '../../i18n';
-import DirectoryItem, { ROW_HEIGHT } from '../../presentation/DirectoryItem';
-import ServerItem from '../../presentation/ServerItem';
+import DirectoryItem, { ROW_HEIGHT } from '../../containers/DirectoryItem';
+import ServerItem from '../../containers/ServerItem';
 import * as HeaderButton from '../../containers/HeaderButton';
 import ActivityIndicator from '../../containers/ActivityIndicator';
 import * as List from '../../containers/List';
-import { themes } from '../../constants/colors';
-import { animateNextTransition } from '../../utils/layoutAnimation';
-import { withTheme } from '../../theme';
+import { themes } from '../../lib/constants';
+import { animateNextTransition } from '../../lib/methods/helpers/layoutAnimation';
+import { TSupportedThemes, withTheme } from '../../theme';
 import SafeAreaView from '../../containers/SafeAreaView';
-import RocketChat from '../../lib/rocketchat';
 import { sanitizeLikeString } from '../../lib/database/utils';
 import styles from './styles';
 import ShareListHeader from './Header';
+import { TServerModel, TSubscriptionModel } from '../../definitions';
+import { ShareInsideStackParamList } from '../../definitions/navigationTypes';
+import { getRoomAvatar, isAndroid, isIOS } from '../../lib/methods/helpers';
 
-interface IFile {
+interface IDataFromShare {
 	value: string;
 	type: string;
 }
 
-interface IAttachment {
+interface IFileToShare {
 	filename: string;
 	description: string;
 	size: number;
-	mime: any;
+	mime: string;
 	path: string;
 }
 
-interface IChat {
-	rid: string;
-	t: string;
-	name: string;
-	fname: string;
-	blocked: boolean;
-	blocker: boolean;
-	prid: string;
-	uids: string[];
-	usernames: string[];
-	topic: string;
-	description: string;
-}
-
-interface IServerInfo {
-	useRealName: boolean;
-}
 interface IState {
 	searching: boolean;
 	searchText: string;
-	searchResults: IChat[];
-	chats: IChat[];
+	searchResults: TSubscriptionModel[];
+	chats: TSubscriptionModel[];
 	serversCount: number;
-	attachments: IAttachment[];
+	attachments: IFileToShare[];
 	text: string;
 	loading: boolean;
-	serverInfo: IServerInfo;
+	serverInfo: TServerModel;
 	needsPermission: boolean;
 }
 
 interface INavigationOption {
-	navigation: StackNavigationProp<any, 'ShareListView'>;
+	navigation: StackNavigationProp<ShareInsideStackParamList, 'ShareListView'>;
 }
 
 interface IShareListViewProps extends INavigationOption {
 	server: string;
 	token: string;
 	userId: string;
-	theme: string;
+	theme: TSupportedThemes;
 }
 
 const permission: Rationale = {
@@ -86,7 +70,7 @@ const permission: Rationale = {
 };
 
 const getItemLayout = (data: any, index: number) => ({ length: data.length, offset: ROW_HEIGHT * index, index });
-const keyExtractor = (item: IChat) => item.rid;
+const keyExtractor = (item: TSubscriptionModel) => item.rid;
 
 class ShareListView extends React.Component<IShareListViewProps, IState> {
 	private unsubscribeFocus: (() => void) | undefined;
@@ -104,7 +88,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 			attachments: [],
 			text: '',
 			loading: true,
-			serverInfo: {} as IServerInfo,
+			serverInfo: {} as TServerModel,
 			needsPermission: isAndroid || false
 		};
 		this.setHeader();
@@ -121,7 +105,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 	async componentDidMount() {
 		const { server } = this.props;
 		try {
-			const data = (await ShareExtension.data()) as IFile[];
+			const data = (await ShareExtension.data()) as IDataFromShare[];
 			if (isAndroid) {
 				await this.askForPermission(data);
 			}
@@ -136,7 +120,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 				size: file.size,
 				mime: mime.lookup(file.uri),
 				path: file.uri
-			})) as IAttachment[];
+			})) as IFileToShare[];
 			const text = data.filter(item => item.type === 'text').reduce((acc, item) => `${item.value}\n${acc}`, '');
 			this.setState({
 				text,
@@ -254,7 +238,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 		const data = (await db
 			.get('subscriptions')
 			.query(...defaultWhereClause)
-			.fetch()) as IChat[];
+			.fetch()) as TSubscriptionModel[];
 
 		return data.map(item => ({
 			rid: item.rid,
@@ -266,7 +250,8 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 			prid: item.prid,
 			uids: item.uids,
 			usernames: item.usernames,
-			topic: item.topic
+			topic: item.topic,
+			teamMain: item.teamMain
 		}));
 	};
 
@@ -294,7 +279,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 		}
 	};
 
-	askForPermission = async (data: IFile[]) => {
+	askForPermission = async (data: IDataFromShare[]) => {
 		const mediaIndex = data.findIndex(item => item.type === 'media');
 		if (mediaIndex !== -1) {
 			const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE, permission);
@@ -309,12 +294,12 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 
 	uriToPath = (uri: string) => decodeURIComponent(isIOS ? uri.replace(/^file:\/\//, '') : uri);
 
-	getRoomTitle = (item: IChat) => {
+	getRoomTitle = (item: TSubscriptionModel) => {
 		const { serverInfo } = this.state;
 		return ((item.prid || serverInfo?.useRealName) && item.fname) || item.name;
 	};
 
-	shareMessage = (room: IChat) => {
+	shareMessage = (room: TSubscriptionModel) => {
 		const { attachments, text, serverInfo } = this.state;
 		const { navigation } = this.props;
 
@@ -371,9 +356,8 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 		);
 	};
 
-	renderItem = ({ item }: { item: IChat }) => {
+	renderItem = ({ item }: { item: TSubscriptionModel }) => {
 		const { serverInfo } = this.state;
-		const { theme } = this.props;
 		let description;
 		switch (item.t) {
 			case 'c':
@@ -392,12 +376,12 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 		return (
 			<DirectoryItem
 				title={this.getRoomTitle(item)}
-				avatar={RocketChat.getRoomAvatar(item)}
+				avatar={getRoomAvatar(item)}
 				description={description}
 				type={item.prid ? 'discussion' : item.t}
 				onPress={() => this.shareMessage(item)}
 				testID={`share-extension-item-${item.name}`}
-				theme={theme}
+				teamMain={item.teamMain}
 			/>
 		);
 	};
@@ -447,7 +431,7 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 		const { theme } = this.props;
 
 		if (loading) {
-			return <ActivityIndicator theme={theme} />;
+			return <ActivityIndicator />;
 		}
 
 		if (needsPermission) {
@@ -455,7 +439,8 @@ class ShareListView extends React.Component<IShareListViewProps, IState> {
 				<SafeAreaView>
 					<ScrollView
 						style={{ backgroundColor: themes[theme].backgroundColor }}
-						contentContainerStyle={[styles.container, styles.centered, { backgroundColor: themes[theme].backgroundColor }]}>
+						contentContainerStyle={[styles.container, styles.centered, { backgroundColor: themes[theme].backgroundColor }]}
+					>
 						<Text style={[styles.permissionTitle, { color: themes[theme].titleText }]}>{permission.title}</Text>
 						<Text style={[styles.permissionMessage, { color: themes[theme].bodyText }]}>{permission.message}</Text>
 					</ScrollView>

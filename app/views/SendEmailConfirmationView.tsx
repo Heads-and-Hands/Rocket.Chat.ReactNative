@@ -1,30 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/core';
 
 import { OutsideParamList } from '../stacks/types';
-import TextInput from '../containers/TextInput';
+import { FormTextInput } from '../containers/TextInput';
 import Button from '../containers/Button';
-import { showErrorAlert } from '../utils/info';
-import isValidEmail from '../utils/isValidEmail';
+import { showErrorAlert, isValidEmail } from '../lib/methods/helpers';
 import I18n from '../i18n';
-import RocketChat from '../lib/rocketchat';
-import { useTheme } from '../theme';
 import FormContainer, { FormContainerInner } from '../containers/FormContainer';
-import log, { events, logEvent } from '../utils/log';
+import log, { events, logEvent } from '../lib/methods/helpers/log';
 import sharedStyles from './Styles';
+import { IBaseScreen } from '../definitions';
+import { Services } from '../lib/services';
 
-interface ISendEmailConfirmationViewProps {
-	navigation: StackNavigationProp<OutsideParamList, 'SendEmailConfirmationView'>;
-	route: RouteProp<OutsideParamList, 'SendEmailConfirmationView'>;
-}
+type ISendEmailConfirmationViewProps = IBaseScreen<OutsideParamList, 'SendEmailConfirmationView'>;
 
-const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmationViewProps): JSX.Element => {
+const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmationViewProps): React.ReactElement => {
 	const [email, setEmail] = useState('');
 	const [invalidEmail, setInvalidEmail] = useState(true);
 	const [isFetching, setIsFetching] = useState(false);
-
-	const { theme } = useTheme();
 
 	const validate = (val: string) => {
 		const isInvalidEmail = !isValidEmail(val);
@@ -39,7 +31,7 @@ const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmation
 		}
 		try {
 			setIsFetching(true);
-			const result = await RocketChat.sendConfirmationEmail(email);
+			const result = await Services.sendConfirmationEmail(email);
 			if (result.success) {
 				navigation.pop();
 				showErrorAlert(I18n.t('Verify_email_desc'));
@@ -62,9 +54,9 @@ const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmation
 	}, []);
 
 	return (
-		<FormContainer theme={theme} testID='send-email-confirmation-view'>
+		<FormContainer testID='send-email-confirmation-view'>
 			<FormContainerInner>
-				<TextInput
+				<FormTextInput
 					autoFocus
 					placeholder={I18n.t('Email')}
 					keyboardType='email-address'
@@ -73,7 +65,6 @@ const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmation
 					onSubmitEditing={resendConfirmationEmail}
 					testID='send-email-confirmation-view-email'
 					containerStyle={sharedStyles.inputLastChild}
-					theme={theme}
 					value={email}
 				/>
 				<Button
@@ -83,7 +74,6 @@ const SendEmailConfirmationView = ({ navigation, route }: ISendEmailConfirmation
 					testID='send-email-confirmation-view-submit'
 					loading={isFetching}
 					disabled={invalidEmail}
-					theme={theme}
 				/>
 			</FormContainerInner>
 		</FormContainer>

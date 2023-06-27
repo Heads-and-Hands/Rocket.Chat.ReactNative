@@ -1,17 +1,13 @@
 import React from 'react';
 
-import { UserMention } from '../../message/interfaces';
+import { IUserMention, IUserChannel } from '../interfaces';
 
 interface IMarkdownContext {
-	mentions: UserMention[];
-	channels: {
-		name: string;
-		_id: number;
-	}[];
-	useRealName: boolean;
-	username: string;
-	baseUrl: string;
-	navToRoomInfo: Function;
+	mentions?: IUserMention[];
+	channels?: IUserChannel[];
+	useRealName?: boolean;
+	username?: string;
+	navToRoomInfo?: Function;
 	getCustomEmoji?: Function;
 	onLinkPress?: Function;
 }
@@ -21,7 +17,6 @@ const defaultState = {
 	channels: [],
 	useRealName: false,
 	username: '',
-	baseUrl: '',
 	navToRoomInfo: () => {}
 };
 

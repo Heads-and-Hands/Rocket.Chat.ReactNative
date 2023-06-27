@@ -2,13 +2,13 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import I18n from '../../i18n';
-import { CustomIcon } from '../../lib/Icons';
-import RocketChat from '../../lib/rocketchat';
-import { themes } from '../../constants/colors';
-import { withTheme } from '../../theme';
-import { isAndroid, isTablet } from '../../utils/deviceInfo';
+import { CustomIcon, TIconsName } from '../../containers/CustomIcon';
+import { themes } from '../../lib/constants';
+import { useTheme } from '../../theme';
 import sharedStyles from '../Styles';
-import { makeThreadName } from '../../utils/room';
+import { makeThreadName } from '../../lib/methods/helpers/room';
+import { ISubscription, TThreadModel } from '../../definitions';
+import { getRoomTitle, isGroupChat, isAndroid, isTablet } from '../../lib/methods/helpers';
 
 const androidMarginLeft = isTablet ? 0 : 4;
 
@@ -35,12 +35,12 @@ const styles = StyleSheet.create({
 });
 
 interface IHeader {
-	room: { prid?: string; t?: string };
-	thread: { id?: string };
-	theme: string;
+	room: ISubscription;
+	thread: TThreadModel;
 }
 
-const Header = React.memo(({ room, thread, theme }: IHeader) => {
+const Header = React.memo(({ room, thread }: IHeader) => {
+	const { theme } = useTheme();
 	let type;
 	if (thread?.id) {
 		type = 'thread';
@@ -49,7 +49,7 @@ const Header = React.memo(({ room, thread, theme }: IHeader) => {
 	} else {
 		type = room?.t;
 	}
-	let icon;
+	let icon: TIconsName;
 	if (type === 'discussion') {
 		icon = 'discussions';
 	} else if (type === 'thread') {
@@ -59,7 +59,7 @@ const Header = React.memo(({ room, thread, theme }: IHeader) => {
 	} else if (type === 'l') {
 		icon = 'omnichannel';
 	} else if (type === 'd') {
-		if (RocketChat.isGroupChat(room)) {
+		if (isGroupChat(room)) {
 			icon = 'team';
 		} else {
 			icon = 'mention';
@@ -74,7 +74,7 @@ const Header = React.memo(({ room, thread, theme }: IHeader) => {
 	if (thread?.id) {
 		title = makeThreadName(thread);
 	} else {
-		title = RocketChat.getRoomTitle(room);
+		title = getRoomTitle(room);
 	}
 
 	return (
@@ -94,4 +94,4 @@ const Header = React.memo(({ room, thread, theme }: IHeader) => {
 	);
 });
 
-export default withTheme(Header);
+export default Header;

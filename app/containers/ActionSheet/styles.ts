@@ -27,7 +27,6 @@ export default StyleSheet.create({
 	},
 	title: {
 		fontSize: 16,
-		marginLeft: 16,
 		...sharedStyles.textRegular
 	},
 	handle: {
@@ -46,15 +45,14 @@ export default StyleSheet.create({
 	},
 	bottomSheet: {
 		width: '50%',
-		alignSelf: 'center',
-		left: '25%'
+		marginHorizontal: '25%'
 	},
 	button: {
 		marginHorizontal: 16,
 		paddingHorizontal: 14,
 		justifyContent: 'center',
 		height: ITEM_HEIGHT,
-		borderRadius: 2,
+		borderRadius: 4,
 		marginBottom: 12
 	},
 	text: {
@@ -64,5 +62,15 @@ export default StyleSheet.create({
 	},
 	rightContainer: {
 		paddingLeft: 12
+	},
+	footerButtonsContainer: {
+		flexDirection: 'row',
+		paddingTop: 16
+	},
+	buttonSeparator: {
+		marginRight: 8
+	},
+	contentContainer: {
+		flex: 1
 	}
 });

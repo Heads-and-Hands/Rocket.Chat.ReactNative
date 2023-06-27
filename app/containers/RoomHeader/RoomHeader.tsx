@@ -3,10 +3,11 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import I18n from '../../i18n';
 import sharedStyles from '../../views/Styles';
-import { themes } from '../../constants/colors';
-import Markdown from '../markdown';
+import { MarkdownPreview } from '../markdown';
 import RoomTypeIcon from '../RoomTypeIcon';
-import { withTheme } from '../../theme';
+import { TUserStatus, IOmnichannelSource } from '../../definitions';
+import { useTheme } from '../../theme';
+import { useAppSelector } from '../../lib/hooks';
 
 const HIT_SLOP = {
 	top: 5,
@@ -43,40 +44,39 @@ const styles = StyleSheet.create({
 
 type TRoomHeaderSubTitle = {
 	usersTyping: [];
-	theme: string;
-	subtitle: string;
-	renderFunc: any;
+	subtitle?: string;
+	renderFunc?: () => React.ReactElement;
 	scale: number;
 };
 
 type TRoomHeaderHeaderTitle = {
-	title: string;
-	tmid: string;
-	prid: string;
+	title?: string;
+	tmid?: string;
+	prid?: string;
 	scale: number;
-	theme: string;
-	testID: string;
+	testID?: string;
 };
 
 interface IRoomHeader {
-	title: string;
-	subtitle: string;
+	title?: string;
+	subtitle?: string;
 	type: string;
 	width: number;
 	height: number;
-	prid: string;
-	tmid: string;
-	teamMain: boolean;
-	status: string;
-	theme: string;
+	prid?: string;
+	tmid?: string;
+	teamMain?: boolean;
+	status: TUserStatus;
 	usersTyping: [];
-	isGroupChat: boolean;
-	parentTitle: string;
+	isGroupChat?: boolean;
+	parentTitle?: string;
 	onPress: Function;
-	testID: string;
+	testID?: string;
+	sourceType?: IOmnichannelSource;
 }
 
-const SubTitle = React.memo(({ usersTyping, subtitle, renderFunc, theme, scale }: TRoomHeaderSubTitle) => {
+const SubTitle = React.memo(({ usersTyping, subtitle, renderFunc, scale }: TRoomHeaderSubTitle) => {
+	const { colors } = useTheme();
 	const fontSize = getSubTitleSize(scale);
 	// typing
 	if (usersTyping.length) {
@@ -87,7 +87,7 @@ const SubTitle = React.memo(({ usersTyping, subtitle, renderFunc, theme, scale }
 			usersText = usersTyping.join(', ');
 		}
 		return (
-			<Text style={[styles.subtitle, { fontSize, color: themes[theme].auxiliaryText }]} numberOfLines={1}>
+			<Text style={[styles.subtitle, { fontSize, color: colors.auxiliaryText }]} numberOfLines={1}>
 				<Text style={styles.typingUsers}>{usersText} </Text>
 				{usersTyping.length > 1 ? I18n.t('are_typing') : I18n.t('is_typing')}...
 			</Text>
@@ -101,23 +101,15 @@ const SubTitle = React.memo(({ usersTyping, subtitle, renderFunc, theme, scale }
 
 	// subtitle
 	if (subtitle) {
-		return (
-			// @ts-ignore
-			<Markdown
-				preview
-				msg={subtitle}
-				style={[styles.subtitle, { fontSize, color: themes[theme].auxiliaryText }]}
-				numberOfLines={1}
-				theme={theme}
-			/>
-		);
+		return <MarkdownPreview msg={subtitle} style={[styles.subtitle, { fontSize, color: colors.auxiliaryText }]} />;
 	}
 
 	return null;
 });
 
-const HeaderTitle = React.memo(({ title, tmid, prid, scale, theme, testID }: TRoomHeaderHeaderTitle) => {
-	const titleStyle = { fontSize: TITLE_SIZE * scale, color: themes[theme].headerTitleColor };
+const HeaderTitle = React.memo(({ title, tmid, prid, scale, testID }: TRoomHeaderHeaderTitle) => {
+	const { colors } = useTheme();
+	const titleStyle = { fontSize: TITLE_SIZE * scale, color: colors.headerTitleColor };
 	if (!tmid && !prid) {
 		return (
 			<Text style={[styles.title, titleStyle]} numberOfLines={1} testID={testID}>
@@ -126,10 +118,7 @@ const HeaderTitle = React.memo(({ title, tmid, prid, scale, theme, testID }: TRo
 		);
 	}
 
-	return (
-		// @ts-ignore
-		<Markdown preview msg={title} style={[styles.title, titleStyle]} numberOfLines={1} theme={theme} testID={testID} />
-	);
+	return <MarkdownPreview msg={title} style={[styles.title, titleStyle]} testID={testID} />;
 });
 
 const Header = React.memo(
@@ -144,16 +133,18 @@ const Header = React.memo(
 		prid,
 		tmid,
 		onPress,
-		theme,
 		isGroupChat,
 		teamMain,
 		testID,
-		usersTyping = []
+		usersTyping = [],
+		sourceType
 	}: IRoomHeader) => {
+		const { colors } = useTheme();
 		const portrait = height > width;
 		let scale = 1;
+		const isMasterDetail = useAppSelector(state => state.app.isMasterDetail);
 
-		if (!portrait && !tmid) {
+		if (!portrait && !tmid && !isMasterDetail) {
 			if (usersTyping.length > 0 || subtitle) {
 				scale = 0.8;
 			}
@@ -164,7 +155,7 @@ const Header = React.memo(
 			renderFunc = () => (
 				<View style={styles.titleContainer}>
 					<RoomTypeIcon type={prid ? 'discussion' : type} isGroupChat={isGroupChat} status={status} teamMain={teamMain} />
-					<Text style={[styles.subtitle, { color: themes[theme].auxiliaryText }]} numberOfLines={1}>
+					<Text style={[styles.subtitle, { color: colors.auxiliaryText }]} numberOfLines={1}>
 						{parentTitle}
 					</Text>
 				</View>
@@ -179,19 +170,25 @@ const Header = React.memo(
 				accessibilityLabel={title}
 				onPress={handleOnPress}
 				style={styles.container}
-				// @ts-ignore
-				disabled={tmid}
-				hitSlop={HIT_SLOP}>
+				disabled={!!tmid}
+				hitSlop={HIT_SLOP}
+			>
 				<View style={styles.titleContainer}>
 					{tmid ? null : (
-						<RoomTypeIcon type={prid ? 'discussion' : type} isGroupChat={isGroupChat} status={status} teamMain={teamMain} />
+						<RoomTypeIcon
+							type={prid ? 'discussion' : type}
+							isGroupChat={isGroupChat}
+							status={status}
+							teamMain={teamMain}
+							sourceType={sourceType}
+						/>
 					)}
-					<HeaderTitle title={title} tmid={tmid} prid={prid} scale={scale} theme={theme} testID={testID} />
+					<HeaderTitle title={title} tmid={tmid} prid={prid} scale={scale} testID={testID} />
 				</View>
-				<SubTitle usersTyping={tmid ? [] : usersTyping} subtitle={subtitle} theme={theme} renderFunc={renderFunc} scale={scale} />
+				<SubTitle usersTyping={tmid ? [] : usersTyping} subtitle={subtitle} renderFunc={renderFunc} scale={scale} />
 			</TouchableOpacity>
 		);
 	}
 );
 
-export default withTheme(Header);
+export default Header;

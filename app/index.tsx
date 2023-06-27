@@ -1,37 +1,46 @@
 import React from 'react';
 import { Dimensions, Linking } from 'react-native';
-import { AppearanceProvider } from 'react-native-appearance';
-import { Provider } from 'react-redux';
 import { KeyCommandsEmitter } from 'react-native-keycommands';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import RNScreens from 'react-native-screens';
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { Provider } from 'react-redux';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { defaultTheme, newThemeState, subscribeTheme, unsubscribeTheme } from './utils/theme';
-import UserPreferences from './lib/userPreferences';
-import EventEmitter from './utils/events';
 import { appInit, appInitLocalSettings, setMasterDetail as setMasterDetailAction } from './actions/app';
 import { deepLinkingOpen } from './actions/deepLinking';
-import parseQuery from './lib/methods/helpers/parseQuery';
-import { initializePushNotifications, onNotification } from './notifications/push';
-import store from './lib/createStore';
-import { toggleAnalyticsEventsReport, toggleCrashErrorsReport } from './utils/log';
-import { ThemeContext } from './theme';
-import { DimensionsContext } from './dimensions';
-import RocketChat, { THEME_PREFERENCES_KEY } from './lib/rocketchat';
-import { MIN_WIDTH_MASTER_DETAIL_LAYOUT } from './constants/tablet';
-import { isTablet, supportSystemTheme } from './utils/deviceInfo';
-import { KEY_COMMAND } from './commands';
 import AppContainer from './AppContainer';
-import TwoFactor from './containers/TwoFactor';
-import ScreenLockedView from './views/ScreenLockedView';
-import ChangePasscodeView from './views/ChangePasscodeView';
-import Toast from './containers/Toast';
-import InAppNotification from './containers/InAppNotification';
+import { KEY_COMMAND } from './commands';
 import { ActionSheetProvider } from './containers/ActionSheet';
-import debounce from './utils/debounce';
-import { isFDroidBuild } from './constants/environment';
+import InAppNotification from './containers/InAppNotification';
+import Toast from './containers/Toast';
+import TwoFactor from './containers/TwoFactor';
+import Loading from './containers/Loading';
+import { ICommand } from './definitions/ICommand';
+import { IThemePreference } from './definitions/ITheme';
+import { DimensionsContext } from './dimensions';
+import { colors, isFDroidBuild, MIN_WIDTH_MASTER_DETAIL_LAYOUT, themes } from './lib/constants';
+import { getAllowAnalyticsEvents, getAllowCrashReport } from './lib/methods';
+import parseQuery from './lib/methods/helpers/parseQuery';
+import { initializePushNotifications, onNotification } from './lib/notifications';
+import store from './lib/store';
+import { initStore } from './lib/store/auxStore';
+import { ThemeContext, TSupportedThemes } from './theme';
+import { debounce, isTablet } from './lib/methods/helpers';
+import EventEmitter from './lib/methods/helpers/events';
+import { toggleAnalyticsEventsReport, toggleCrashErrorsReport } from './lib/methods/helpers/log';
+import {
+	getTheme,
+	initialTheme,
+	newThemeState,
+	setNativeTheme,
+	subscribeTheme,
+	unsubscribeTheme
+} from './lib/methods/helpers/theme';
+import ChangePasscodeView from './views/ChangePasscodeView';
+import ScreenLockedView from './views/ScreenLockedView';
 
 RNScreens.enableScreens();
+initStore(store);
 
 interface IDimensions {
 	width: number;
@@ -41,11 +50,8 @@ interface IDimensions {
 }
 
 interface IState {
-	theme: string;
-	themePreferences: {
-		currentTheme: 'automatic' | 'light';
-		darkLevel: string;
-	};
+	theme: TSupportedThemes;
+	themePreferences: IThemePreference;
 	width: number;
 	height: number;
 	scale: number;
@@ -87,12 +93,10 @@ export default class Root extends React.Component<{}, IState> {
 			this.initCrashReport();
 		}
 		const { width, height, scale, fontScale } = Dimensions.get('window');
+		const theme = initialTheme();
 		this.state = {
-			theme: defaultTheme(),
-			themePreferences: {
-				currentTheme: supportSystemTheme() ? 'automatic' : 'light',
-				darkLevel: 'black'
-			},
+			theme: getTheme(theme),
+			themePreferences: theme,
 			width,
 			height,
 			scale,
@@ -101,6 +105,7 @@ export default class Root extends React.Component<{}, IState> {
 		if (isTablet) {
 			this.initTablet();
 		}
+		setNativeTheme(theme);
 	}
 
 	componentDidMount() {
@@ -127,7 +132,6 @@ export default class Root extends React.Component<{}, IState> {
 	}
 
 	init = async () => {
-		UserPreferences.getMapAsync(THEME_PREFERENCES_KEY).then((theme: any) => this.setTheme(theme));
 		store.dispatch(appInitLocalSettings());
 
 		// Open app from push notification
@@ -175,7 +179,7 @@ export default class Root extends React.Component<{}, IState> {
 	setTheme = (newTheme = {}) => {
 		// change theme state
 		this.setState(
-			prevState => newThemeState(prevState, newTheme),
+			prevState => newThemeState(prevState, newTheme as IThemePreference),
 			() => {
 				const { themePreferences } = this.state;
 				// subscribe to Appearance changes
@@ -191,16 +195,16 @@ export default class Root extends React.Component<{}, IState> {
 	initTablet = () => {
 		const { width } = this.state;
 		this.setMasterDetail(width);
-		this.onKeyCommands = KeyCommandsEmitter.addListener('onKeyCommand', (command: unknown) => {
+		this.onKeyCommands = KeyCommandsEmitter.addListener('onKeyCommand', (command: ICommand) => {
 			EventEmitter.emit(KEY_COMMAND, { event: command });
 		});
 	};
 
 	initCrashReport = () => {
-		RocketChat.getAllowCrashReport().then(allowCrashReport => {
+		getAllowCrashReport().then(allowCrashReport => {
 			toggleCrashErrorsReport(allowCrashReport);
 		});
-		RocketChat.getAllowAnalyticsEvents().then(allowAnalyticsEvents => {
+		getAllowAnalyticsEvents().then(allowAnalyticsEvents => {
 			toggleAnalyticsEventsReport(allowAnalyticsEvents);
 		});
 	};
@@ -208,23 +212,29 @@ export default class Root extends React.Component<{}, IState> {
 	render() {
 		const { themePreferences, theme, width, height, scale, fontScale } = this.state;
 		return (
-			<SafeAreaProvider initialMetrics={initialWindowMetrics}>
-				<AppearanceProvider>
-					<Provider store={store}>
-						<ThemeContext.Provider
+			<SafeAreaProvider
+				initialMetrics={initialWindowMetrics}
+				style={{ backgroundColor: themes[this.state.theme].backgroundColor }}
+			>
+				<Provider store={store}>
+					<ThemeContext.Provider
+						value={{
+							theme,
+							themePreferences,
+							setTheme: this.setTheme,
+							colors: colors[theme]
+						}}
+					>
+						<DimensionsContext.Provider
 							value={{
-								theme,
-								themePreferences,
-								setTheme: this.setTheme
-							}}>
-							<DimensionsContext.Provider
-								value={{
-									width,
-									height,
-									scale,
-									fontScale,
-									setDimensions: this.setDimensions
-								}}>
+								width,
+								height,
+								scale,
+								fontScale,
+								setDimensions: this.setDimensions
+							}}
+						>
+							<GestureHandlerRootView style={{ flex: 1 }}>
 								<ActionSheetProvider>
 									<AppContainer />
 									<TwoFactor />
@@ -232,11 +242,12 @@ export default class Root extends React.Component<{}, IState> {
 									<ChangePasscodeView />
 									<InAppNotification />
 									<Toast />
+									<Loading />
 								</ActionSheetProvider>
-							</DimensionsContext.Provider>
-						</ThemeContext.Provider>
-					</Provider>
-				</AppearanceProvider>
+							</GestureHandlerRootView>
+						</DimensionsContext.Provider>
+					</ThemeContext.Provider>
+				</Provider>
 			</SafeAreaProvider>
 		);
 	}

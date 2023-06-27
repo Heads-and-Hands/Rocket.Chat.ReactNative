@@ -1,20 +1,21 @@
 import React from 'react';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import prettyBytes from 'pretty-bytes';
+import { useHeaderHeight } from '@react-navigation/elements';
 
-import { CustomIcon } from '../../lib/Icons';
-import { ImageViewer, types } from '../../presentation/ImageViewer';
-import { themes } from '../../constants/colors';
-import { useDimensions, useOrientation } from '../../dimensions';
-import { getHeaderHeight } from '../../containers/Header';
+import { CustomIcon, TIconsName } from '../../containers/CustomIcon';
+import { ImageViewer, types } from '../../containers/ImageViewer';
+import { useDimensions } from '../../dimensions';
 import sharedStyles from '../Styles';
 import I18n from '../../i18n';
-import { isAndroid } from '../../utils/deviceInfo';
+import { isAndroid } from '../../lib/methods/helpers';
 import { allowPreview } from './utils';
 import { THUMBS_HEIGHT } from './constants';
-import { IAttachment, IUseDimensions } from './interfaces';
+import { TSupportedThemes } from '../../theme';
+import { themes } from '../../lib/constants';
+import { IShareAttachment } from '../../definitions';
 
 const MESSAGEBOX_HEIGHT = 56;
 
@@ -36,10 +37,10 @@ const styles = StyleSheet.create({
 });
 
 interface IIconPreview {
-	iconName: string;
+	iconName: TIconsName;
 	title: string;
 	description?: string;
-	theme: string;
+	theme: TSupportedThemes;
 	width: number;
 	height: number;
 	danger?: boolean;
@@ -48,7 +49,8 @@ interface IIconPreview {
 const IconPreview = React.memo(({ iconName, title, description, theme, width, height, danger }: IIconPreview) => (
 	<ScrollView
 		style={{ backgroundColor: themes[theme].auxiliaryBackground }}
-		contentContainerStyle={[styles.fileContainer, { width, height }]}>
+		contentContainerStyle={[styles.fileContainer, { width, height }]}
+	>
 		<CustomIcon name={iconName} size={56} color={danger ? themes[theme].dangerColor : themes[theme].tintColor} />
 		<Text style={[styles.fileName, { color: themes[theme].titleText }]}>{title}</Text>
 		{description ? <Text style={[styles.fileSize, { color: themes[theme].bodyText }]}>{description}</Text> : null}
@@ -56,18 +58,17 @@ const IconPreview = React.memo(({ iconName, title, description, theme, width, he
 ));
 
 interface IPreview {
-	item: IAttachment;
-	theme: string;
+	item: IShareAttachment;
+	theme: TSupportedThemes;
 	isShareExtension: boolean;
 	length: number;
 }
 
 const Preview = React.memo(({ item, theme, isShareExtension, length }: IPreview) => {
 	const type = item?.mime;
-	const { width, height } = useDimensions() as IUseDimensions;
-	const { isLandscape } = useOrientation();
+	const { width, height } = useDimensions();
 	const insets = useSafeAreaInsets();
-	const headerHeight = getHeaderHeight(isLandscape);
+	const headerHeight = useHeaderHeight();
 	const thumbsHeight = length > 1 ? THUMBS_HEIGHT : 0;
 	const calculatedHeight = height - insets.top - insets.bottom - MESSAGEBOX_HEIGHT - thumbsHeight - headerHeight;
 
@@ -81,7 +82,7 @@ const Preview = React.memo(({ item, theme, isShareExtension, length }: IPreview)
 						rate={1.0}
 						volume={1.0}
 						isMuted={false}
-						resizeMode={Video.RESIZE_MODE_CONTAIN}
+						resizeMode={ResizeMode.CONTAIN}
 						isLooping={false}
 						style={{ width, height: calculatedHeight }}
 						useNativeControls
@@ -99,7 +100,6 @@ const Preview = React.memo(({ item, theme, isShareExtension, length }: IPreview)
 						imageComponentType={isShareExtension ? types.REACT_NATIVE_IMAGE : types.FAST_IMAGE}
 						width={width}
 						height={calculatedHeight}
-						theme={theme}
 					/>
 				);
 			}

@@ -5,18 +5,17 @@ import { RouteProp } from '@react-navigation/native';
 import { connect } from 'react-redux';
 import { KeyboardAwareScrollView } from '@codler/react-native-keyboard-aware-scroll-view';
 
-import { withTheme } from '../theme';
-import EventEmitter from '../utils/events';
-import { themes } from '../constants/colors';
+import { TSupportedThemes, withTheme } from '../theme';
+import EventEmitter from '../lib/methods/helpers/events';
+import { themes } from '../lib/constants';
 import * as HeaderButton from '../containers/HeaderButton';
 import { modalBlockWithContext } from '../containers/UIKit/MessageBlock';
-import RocketChat from '../lib/rocketchat';
 import ActivityIndicator from '../containers/ActivityIndicator';
-import { CONTAINER_TYPES, MODAL_ACTIONS } from '../lib/methods/actions';
 import { textParser } from '../containers/UIKit/utils';
-import Navigation from '../lib/Navigation';
-import sharedStyles from './Styles';
+import Navigation from '../lib/navigation/appNavigation';
 import { MasterDetailInsideStackParamList } from '../stacks/MasterDetailStack/types';
+import { ContainerTypes, ModalActions } from '../containers/UIKit/interfaces';
+import { triggerBlockAction, triggerCancel, triggerSubmitView } from '../lib/methods';
 
 const styles = StyleSheet.create({
 	container: {
@@ -25,10 +24,6 @@ const styles = StyleSheet.create({
 	},
 	content: {
 		paddingVertical: 16
-	},
-	submit: {
-		...sharedStyles.textSemibold,
-		fontSize: 16
 	}
 });
 
@@ -58,7 +53,7 @@ interface IModalBlockViewState {
 interface IModalBlockViewProps {
 	navigation: StackNavigationProp<MasterDetailInsideStackParamList, 'ModalBlockView'>;
 	route: RouteProp<MasterDetailInsideStackParamList, 'ModalBlockView'>;
-	theme: string;
+	theme: TSupportedThemes;
 	language: string;
 	user: {
 		id: string;
@@ -152,32 +147,22 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 			headerLeft: close
 				? () => (
 						<HeaderButton.Container>
-							<HeaderButton.Item
-								title={textParser([close.text])}
-								style={styles.submit}
-								onPress={this.cancel}
-								testID='close-modal-uikit'
-							/>
+							<HeaderButton.Item title={textParser([close.text])} onPress={this.cancel} testID='close-modal-uikit' />
 						</HeaderButton.Container>
 				  )
 				: undefined,
 			headerRight: submit
 				? () => (
 						<HeaderButton.Container>
-							<HeaderButton.Item
-								title={textParser([submit.text])}
-								style={styles.submit}
-								onPress={this.submit}
-								testID='submit-modal-uikit'
-							/>
+							<HeaderButton.Item title={textParser([submit.text])} onPress={this.submit} testID='submit-modal-uikit' />
 						</HeaderButton.Container>
 				  )
 				: undefined
 		});
 	};
 
-	handleUpdate = ({ type, ...data }: { type: string }) => {
-		if ([MODAL_ACTIONS.ERRORS].includes(type)) {
+	handleUpdate = ({ type, ...data }: { type: ModalActions }) => {
+		if ([ModalActions.ERRORS].includes(type)) {
 			const { errors }: any = data;
 			this.setState({ errors });
 		} else {
@@ -186,19 +171,14 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 		}
 	};
 
-	cancel = async ({ closeModal }: { closeModal?: () => void }) => {
+	cancel = async () => {
 		const { data } = this.state;
 		const { appId, viewId, view } = data;
 
-		// handle tablet case
-		if (closeModal) {
-			closeModal();
-		} else {
-			Navigation.back();
-		}
+		Navigation.back();
 
 		try {
-			await RocketChat.triggerCancel({
+			await triggerCancel({
 				appId,
 				viewId,
 				view: {
@@ -224,7 +204,7 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 		const { appId, viewId } = data;
 		this.setState({ loading: true });
 		try {
-			await RocketChat.triggerSubmitView({
+			await triggerSubmitView({
 				viewId,
 				appId,
 				payload: {
@@ -245,9 +225,9 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 	action = async ({ actionId, value, blockId }: IActions) => {
 		const { data } = this.state;
 		const { mid, appId, viewId } = data;
-		await RocketChat.triggerBlockAction({
+		await triggerBlockAction({
 			container: {
-				type: CONTAINER_TYPES.VIEW,
+				type: ContainerTypes.VIEW,
 				id: viewId
 			},
 			actionId,
@@ -276,7 +256,8 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 		return (
 			<KeyboardAwareScrollView
 				style={[styles.container, { backgroundColor: themes[theme].auxiliaryBackground }]}
-				keyboardShouldPersistTaps='always'>
+				keyboardShouldPersistTaps='always'
+			>
 				<View style={styles.content}>
 					{React.createElement(
 						modalBlockWithContext({
@@ -292,7 +273,7 @@ class ModalBlockView extends React.Component<IModalBlockViewProps, IModalBlockVi
 						}
 					)}
 				</View>
-				{loading ? <ActivityIndicator absolute size='large' theme={theme} /> : null}
+				{loading ? <ActivityIndicator absolute size='large' /> : null}
 			</KeyboardAwareScrollView>
 		);
 	}

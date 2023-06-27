@@ -2,18 +2,14 @@ import { StyleSheet } from 'react-native';
 
 import sharedStyles from '../../../views/Styles';
 
-export default StyleSheet.create<any>({
+export default StyleSheet.create({
 	container: {
 		flex: 1,
 		alignItems: 'center',
 		justifyContent: 'flex-end'
 	},
-	modal: {
-		height: 300,
-		width: '100%',
-		borderTopRightRadius: 16,
-		borderTopLeftRadius: 16,
-		overflow: 'hidden'
+	actionSheetContainer: {
+		flex: 1
 	},
 	content: {
 		padding: 16
@@ -31,16 +27,18 @@ export default StyleSheet.create<any>({
 	},
 	item: {
 		height: 48,
-		maxWidth: '85%',
 		alignItems: 'center',
-		flexDirection: 'row'
+		flexDirection: 'row',
+		flex: 1
+	},
+	inputBorder: {
+		borderRadius: 4
 	},
 	input: {
 		minHeight: 48,
 		paddingHorizontal: 8,
 		paddingBottom: 0,
-		borderWidth: StyleSheet.hairlineWidth,
-		borderRadius: 2,
+		borderWidth: 1,
 		alignItems: 'center',
 		flexDirection: 'row'
 	},
@@ -49,7 +47,11 @@ export default StyleSheet.create<any>({
 		right: 16
 	},
 	itemContent: {
+		paddingHorizontal: 16,
 		paddingBottom: 36
+	},
+	inputStyle: {
+		paddingHorizontal: 16
 	},
 	items: {
 		height: 226
@@ -86,5 +88,11 @@ export default StyleSheet.create<any>({
 		borderRadius: 2,
 		width: 24,
 		height: 24
+	},
+	flex: {
+		flex: 1
+	},
+	flexZ: {
+		flex: 0
 	}
 });

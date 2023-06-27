@@ -199,6 +199,82 @@ export default schemaMigrations({
 					columns: [{ name: 'md', type: 'string', isOptional: true }]
 				})
 			]
+		},
+		{
+			toVersion: 15,
+			steps: [
+				addColumns({
+					table: 'threads',
+					columns: [{ name: 'draft_message', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 16,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'source', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 17,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'on_hold', type: 'boolean', isOptional: true }]
+				}),
+				addColumns({
+					table: 'messages',
+					columns: [{ name: 'comment', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 18,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'hide_mention_status', type: 'boolean', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 19,
+			steps: [
+				addColumns({
+					table: 'uploads',
+					columns: [{ name: 'tmid', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 20,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'e2e_suggested_key', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 21,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'users_count', type: 'string', isOptional: true }]
+				})
+			]
+		},
+		{
+			toVersion: 22,
+			steps: [
+				addColumns({
+					table: 'subscriptions',
+					columns: [{ name: 'sanitized_fname', type: 'string', isOptional: true }]
+				})
+			]
 		}
 	]
 });

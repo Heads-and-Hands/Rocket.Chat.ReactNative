@@ -1,39 +1,37 @@
-import React from 'react';
-import { Text, Keyboard, StyleSheet, View, BackHandler, Image } from 'react-native';
-import { connect } from 'react-redux';
-import { Base64 } from 'js-base64';
-import parse from 'url-parse';
 import { Q } from '@nozbe/watermelondb';
+import { Base64 } from 'js-base64';
+import React from 'react';
+import { BackHandler, Image, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Orientation from 'react-native-orientation-locker';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { Dispatch } from 'redux';
-import Model from '@nozbe/watermelondb/Model';
+import { connect } from 'react-redux';
+import parse from 'url-parse';
 
-import UserPreferences from '../../lib/userPreferences';
-import EventEmitter from '../../utils/events';
-import { selectServerRequest, serverRequest, serverFinishAdd as serverFinishAddAction } from '../../actions/server';
-import { inviteLinksClear as inviteLinksClearAction } from '../../actions/inviteLinks';
-import sharedStyles from '../Styles';
+import { inviteLinksClear } from '../../actions/inviteLinks';
+import { selectServerRequest, serverFinishAdd, serverRequest } from '../../actions/server';
+import { CERTIFICATE_KEY, themes } from '../../lib/constants';
 import Button from '../../containers/Button';
-import OrSeparator from '../../containers/OrSeparator';
 import FormContainer, { FormContainerInner } from '../../containers/FormContainer';
-import I18n from '../../i18n';
-import { themes } from '../../constants/colors';
-import { events, logEvent } from '../../utils/log';
-import { withTheme } from '../../theme';
-import { BASIC_AUTH_KEY, setBasicAuth } from '../../utils/fetch';
 import * as HeaderButton from '../../containers/HeaderButton';
-import { showConfirmationAlert } from '../../utils/info';
+import OrSeparator from '../../containers/OrSeparator';
+import { IApplicationState, IBaseScreen, TServerHistoryModel } from '../../definitions';
+import { withDimensions } from '../../dimensions';
+import I18n from '../../i18n';
 import database from '../../lib/database';
 import { sanitizeLikeString } from '../../lib/database/utils';
-import SSLPinning from '../../utils/sslPinning';
-import RocketChat from '../../lib/rocketchat';
-import { isTablet } from '../../utils/deviceInfo';
-import { verticalScale, moderateScale } from '../../utils/scaling';
-import { withDimensions } from '../../dimensions';
-import ServerInput from './ServerInput';
+import UserPreferences from '../../lib/methods/userPreferences';
 import { OutsideParamList } from '../../stacks/types';
+import { withTheme } from '../../theme';
+import { isIOS, isTablet } from '../../lib/methods/helpers';
+import EventEmitter from '../../lib/methods/helpers/events';
+import { BASIC_AUTH_KEY, setBasicAuth } from '../../lib/methods/helpers/fetch';
+import { showConfirmationAlert } from '../../lib/methods/helpers/info';
+import { events, logEvent } from '../../lib/methods/helpers/log';
+import { moderateScale, verticalScale } from './scaling';
+import SSLPinning from '../../lib/methods/helpers/sslPinning';
+import sharedStyles from '../Styles';
+import ServerInput from './ServerInput';
+import { serializeAsciiUrl } from '../../lib/methods';
 
 const styles = StyleSheet.create({
 	onboardingImage: {
@@ -68,29 +66,18 @@ const styles = StyleSheet.create({
 	}
 });
 
-export interface IServer extends Model {
-	url: string;
-	username: string;
-}
-
-interface INewServerView {
-	navigation: StackNavigationProp<OutsideParamList, 'NewServerView'>;
-	theme: string;
+interface INewServerViewProps extends IBaseScreen<OutsideParamList, 'NewServerView'> {
 	connecting: boolean;
-	connectServer(server: string, username?: string, fromServerHistory?: boolean): void;
-	selectServer(server: string): void;
-	previousServer: string;
-	inviteLinksClear(): void;
-	serverFinishAdd(): void;
+	previousServer: string | null;
 	width: number;
 	height: number;
 }
 
-interface IState {
+interface INewServerViewState {
 	text: string;
 	connectingOpen: boolean;
-	certificate: any;
-	serversHistory: IServer[];
+	certificate: string | null;
+	serversHistory: TServerHistoryModel[];
 }
 
 interface ISubmitParams {
@@ -98,8 +85,8 @@ interface ISubmitParams {
 	username?: string;
 }
 
-class NewServerView extends React.Component<INewServerView, IState> {
-	constructor(props: INewServerView) {
+class NewServerView extends React.Component<INewServerViewProps, INewServerViewState> {
+	constructor(props: INewServerViewProps) {
 		super(props);
 		if (!isTablet) {
 			Orientation.lockToPortrait();
@@ -123,18 +110,27 @@ class NewServerView extends React.Component<INewServerView, IState> {
 	componentWillUnmount() {
 		EventEmitter.removeListener('NewServer', this.handleNewServerEvent);
 		BackHandler.removeEventListener('hardwareBackPress', this.handleBackPress);
-		const { previousServer, serverFinishAdd } = this.props;
+		const { previousServer, dispatch } = this.props;
 		if (previousServer) {
-			serverFinishAdd();
+			dispatch(serverFinishAdd());
+		}
+	}
+
+	componentDidUpdate(prevProps: Readonly<INewServerViewProps>) {
+		if (prevProps.connecting !== this.props.connecting) {
+			this.setHeader();
 		}
 	}
 
 	setHeader = () => {
-		const { previousServer, navigation } = this.props;
+		const { previousServer, navigation, connecting } = this.props;
 		if (previousServer) {
 			return navigation.setOptions({
 				headerTitle: I18n.t('Workspaces'),
-				headerLeft: () => <HeaderButton.CloseModal navigation={navigation} onPress={this.close} testID='new-server-view-close' />
+				headerLeft: () =>
+					!connecting ? (
+						<HeaderButton.CloseModal navigation={navigation} onPress={this.close} testID='new-server-view-close' />
+					) : null
 			});
 		}
 
@@ -166,7 +162,7 @@ class NewServerView extends React.Component<INewServerView, IState> {
 				const likeString = sanitizeLikeString(text);
 				whereClause = [...whereClause, Q.where('url', Q.like(`%${likeString}%`))];
 			}
-			const serversHistory = (await serversHistoryCollection.query(...whereClause).fetch()) as IServer[];
+			const serversHistory = await serversHistoryCollection.query(...whereClause).fetch();
 			this.setState({ serversHistory });
 		} catch {
 			// Do nothing
@@ -174,9 +170,12 @@ class NewServerView extends React.Component<INewServerView, IState> {
 	};
 
 	close = () => {
-		const { selectServer, previousServer, inviteLinksClear } = this.props;
-		inviteLinksClear();
-		selectServer(previousServer);
+		const { dispatch, previousServer } = this.props;
+
+		dispatch(inviteLinksClear());
+		if (previousServer) {
+			dispatch(selectServerRequest(previousServer));
+		}
 	};
 
 	handleNewServerEvent = (event: { server: string }) => {
@@ -184,20 +183,20 @@ class NewServerView extends React.Component<INewServerView, IState> {
 		if (!server) {
 			return;
 		}
-		const { connectServer } = this.props;
+		const { dispatch } = this.props;
 		this.setState({ text: server });
 		server = this.completeUrl(server);
-		connectServer(server);
+		dispatch(serverRequest(server));
 	};
 
-	onPressServerHistory = (serverHistory: IServer) => {
+	onPressServerHistory = (serverHistory: TServerHistoryModel) => {
 		this.setState({ text: serverHistory.url }, () => this.submit({ fromServerHistory: true, username: serverHistory?.username }));
 	};
 
-	submit = async ({ fromServerHistory = false, username }: ISubmitParams = {}) => {
+	submit = ({ fromServerHistory = false, username }: ISubmitParams = {}) => {
 		logEvent(events.NS_CONNECT_TO_WORKSPACE);
 		const { text, certificate } = this.state;
-		const { connectServer } = this.props;
+		const { dispatch } = this.props;
 
 		this.setState({ connectingOpen: false });
 
@@ -206,15 +205,17 @@ class NewServerView extends React.Component<INewServerView, IState> {
 			const server = this.completeUrl(text);
 
 			// Save info - SSL Pinning
-			await UserPreferences.setStringAsync(`${RocketChat.CERTIFICATE_KEY}-${server}`, certificate);
+			if (certificate) {
+				UserPreferences.setString(`${CERTIFICATE_KEY}-${server}`, certificate);
+			}
 
 			// Save info - HTTP Basic Authentication
-			await this.basicAuth(server, text);
+			this.basicAuth(server, text);
 
 			if (fromServerHistory) {
-				connectServer(server, username, true);
+				dispatch(serverRequest(server, username, true));
 			} else {
-				connectServer(server);
+				dispatch(serverRequest(server));
 			}
 		}
 	};
@@ -222,16 +223,16 @@ class NewServerView extends React.Component<INewServerView, IState> {
 	connectOpen = () => {
 		logEvent(events.NS_JOIN_OPEN_WORKSPACE);
 		this.setState({ connectingOpen: true });
-		const { connectServer } = this.props;
-		connectServer('https://open.rocket.chat');
+		const { dispatch } = this.props;
+		dispatch(serverRequest('https://open.rocket.chat'));
 	};
 
-	basicAuth = async (server: string, text: string) => {
+	basicAuth = (server: string, text: string) => {
 		try {
 			const parsedUrl = parse(text, true);
 			if (parsedUrl.auth.length) {
 				const credentials = Base64.encode(parsedUrl.auth);
-				await UserPreferences.setStringAsync(`${BASIC_AUTH_KEY}-${server}`, credentials);
+				UserPreferences.setString(`${BASIC_AUTH_KEY}-${server}`, credentials);
 				setBasicAuth(credentials);
 			}
 		} catch {
@@ -267,30 +268,27 @@ class NewServerView extends React.Component<INewServerView, IState> {
 				url = `https://${url}`;
 			}
 		}
-
-		return url.replace(/\/+$/, '').replace(/\\/g, '/');
+		return serializeAsciiUrl(url.replace(/\/+$/, '').replace(/\\/g, '/'));
 	};
 
 	uriToPath = (uri: string) => uri.replace('file://', '');
 
 	handleRemove = () => {
-		// TODO: Remove ts-ignore when migrate the showConfirmationAlert
-		// @ts-ignore
 		showConfirmationAlert({
 			message: I18n.t('You_will_unset_a_certificate_for_this_server'),
 			confirmationText: I18n.t('Remove'),
-			onPress: this.setState({ certificate: null }) // We not need delete file from DocumentPicker because it is a temp file
+			onPress: () => this.setState({ certificate: null }) // We not need delete file from DocumentPicker because it is a temp file
 		});
 	};
 
-	deleteServerHistory = async (item: IServer) => {
+	deleteServerHistory = async (item: TServerHistoryModel) => {
 		const db = database.servers;
 		try {
 			await db.write(async () => {
 				await item.destroyPermanently();
 			});
-			this.setState((prevstate: IState) => ({
-				serversHistory: prevstate.serversHistory.filter((server: IServer) => server.id !== item.id)
+			this.setState((prevstate: INewServerViewState) => ({
+				serversHistory: prevstate.serversHistory.filter(server => server.id !== item.id)
 			}));
 		} catch {
 			// Nothing
@@ -307,19 +305,23 @@ class NewServerView extends React.Component<INewServerView, IState> {
 					{
 						marginBottom: verticalScale({ size: previousServer && !isTablet ? 10 : 30, height })
 					}
-				]}>
+				]}
+			>
 				<Text
 					style={[
 						styles.chooseCertificateTitle,
 						{ color: themes[theme].auxiliaryText, fontSize: moderateScale({ size: 13, width }) }
-					]}>
+					]}
+				>
 					{certificate ? I18n.t('Your_certificate') : I18n.t('Do_you_have_a_certificate')}
 				</Text>
 				<TouchableOpacity
 					onPress={certificate ? this.handleRemove : this.chooseCertificate}
-					testID='new-server-choose-certificate'>
+					testID='new-server-choose-certificate'
+				>
 					<Text
-						style={[styles.chooseCertificate, { color: themes[theme].tintColor, fontSize: moderateScale({ size: 13, width }) }]}>
+						style={[styles.chooseCertificate, { color: themes[theme].tintColor, fontSize: moderateScale({ size: 13, width }) }]}
+					>
 						{certificate ?? I18n.t('Apply_Your_Certificate')}
 					</Text>
 				</TouchableOpacity>
@@ -333,7 +335,7 @@ class NewServerView extends React.Component<INewServerView, IState> {
 		const marginTop = previousServer ? 0 : 35;
 
 		return (
-			<FormContainer theme={theme} testID='new-server-view' keyboardShouldPersistTaps='never'>
+			<FormContainer testID='new-server-view' keyboardShouldPersistTaps='never'>
 				<FormContainerInner>
 					<Image
 						style={[
@@ -356,7 +358,8 @@ class NewServerView extends React.Component<INewServerView, IState> {
 								fontSize: moderateScale({ size: 22, width }),
 								marginBottom: verticalScale({ size: 8, height })
 							}
-						]}>
+						]}
+					>
 						Rocket.Chat
 					</Text>
 					<Text
@@ -367,7 +370,8 @@ class NewServerView extends React.Component<INewServerView, IState> {
 								fontSize: moderateScale({ size: 16, width }),
 								marginBottom: verticalScale({ size: 30, height })
 							}
-						]}>
+						]}
+					>
 						{I18n.t('Onboarding_subtitle')}
 					</Text>
 					<ServerInput
@@ -386,31 +390,34 @@ class NewServerView extends React.Component<INewServerView, IState> {
 						disabled={!text || connecting}
 						loading={!connectingOpen && connecting}
 						style={[styles.connectButton, { marginTop: verticalScale({ size: 16, height }) }]}
-						theme={theme}
 						testID='new-server-view-button'
 					/>
-					<OrSeparator theme={theme} />
-					<Text
-						style={[
-							styles.description,
-							{
-								color: themes[theme].auxiliaryText,
-								fontSize: moderateScale({ size: 14, width }),
-								marginBottom: verticalScale({ size: 16, height })
-							}
-						]}>
-						{I18n.t('Onboarding_join_open_description')}
-					</Text>
-					<Button
-						title={I18n.t('Join_our_open_workspace')}
-						type='secondary'
-						backgroundColor={themes[theme].chatComponentBackground}
-						onPress={this.connectOpen}
-						disabled={connecting}
-						loading={connectingOpen && connecting}
-						theme={theme}
-						testID='new-server-view-open'
-					/>
+					{isIOS ? (
+						<>
+							<OrSeparator theme={theme} />
+							<Text
+								style={[
+									styles.description,
+									{
+										color: themes[theme].auxiliaryText,
+										fontSize: moderateScale({ size: 14, width }),
+										marginBottom: verticalScale({ size: 16, height })
+									}
+								]}
+							>
+								{I18n.t('Onboarding_join_open_description')}
+							</Text>
+							<Button
+								title={I18n.t('Join_our_open_workspace')}
+								type='secondary'
+								backgroundColor={themes[theme].chatComponentBackground}
+								onPress={this.connectOpen}
+								disabled={connecting}
+								loading={connectingOpen && connecting}
+								testID='new-server-view-open'
+							/>
+						</>
+					) : null}
 				</FormContainerInner>
 				{this.renderCertificatePicker()}
 			</FormContainer>
@@ -418,17 +425,9 @@ class NewServerView extends React.Component<INewServerView, IState> {
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	connecting: state.server.connecting,
 	previousServer: state.server.previousServer
 });
 
-const mapDispatchToProps = (dispatch: Dispatch) => ({
-	connectServer: (server: string, username: string & null, fromServerHistory?: boolean) =>
-		dispatch(serverRequest(server, username, fromServerHistory)),
-	selectServer: (server: string) => dispatch(selectServerRequest(server)),
-	inviteLinksClear: () => dispatch(inviteLinksClearAction()),
-	serverFinishAdd: () => dispatch(serverFinishAddAction())
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(withDimensions(withTheme(NewServerView)));
+export default connect(mapStateToProps)(withDimensions(withTheme(NewServerView)));

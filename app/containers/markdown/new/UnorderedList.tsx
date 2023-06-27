@@ -4,21 +4,23 @@ import { View, Text } from 'react-native';
 
 import Inline from './Inline';
 import styles from '../styles';
-import { themes } from '../../../constants/colors';
+import { themes } from '../../../lib/constants';
 import { useTheme } from '../../../theme';
 
 interface IUnorderedListProps {
 	value: UnorderedListProps['value'];
 }
 
-const UnorderedList = ({ value }: IUnorderedListProps): JSX.Element => {
+const UnorderedList = ({ value }: IUnorderedListProps) => {
 	const { theme } = useTheme();
 	return (
 		<View>
 			{value.map(item => (
 				<View style={styles.row}>
-					<Text style={[styles.text, { color: themes[theme!].bodyText }]}>- </Text>
-					<Inline value={item.value} />
+					<Text style={[styles.text, styles.listPrefix, { color: themes[theme].bodyText }]}>- </Text>
+					<Text style={[styles.text, styles.inline, { color: themes[theme].bodyText }]}>
+						<Inline value={item.value} />
+					</Text>
 				</View>
 			))}
 		</View>

@@ -1,29 +1,20 @@
-import React, { useContext } from 'react';
+import React from 'react';
 import { Text } from 'react-native';
-import PropTypes from 'prop-types';
 
-import shortnameToUnicode from '../../../utils/shortnameToUnicode';
-import styles from '../styles';
-import MessageboxContext from '../Context';
+import { IEmoji } from '../../../definitions/IEmoji';
+import shortnameToUnicode from '../../../lib/methods/helpers/shortnameToUnicode';
 import CustomEmoji from '../../EmojiPicker/CustomEmoji';
-import { IEmoji } from '../../EmojiPicker/interfaces';
+import styles from '../styles';
 
 interface IMessageBoxMentionEmoji {
 	item: IEmoji;
 }
 
 const MentionEmoji = ({ item }: IMessageBoxMentionEmoji) => {
-	const context = useContext(MessageboxContext);
-	const { baseUrl } = context;
-
-	if (item.name) {
-		return <CustomEmoji style={styles.mentionItemCustomEmoji} emoji={item} baseUrl={baseUrl} />;
+	if (typeof item === 'string') {
+		return <Text style={styles.mentionItemEmoji}>{shortnameToUnicode(`:${item}:`)}</Text>;
 	}
-	return <Text style={styles.mentionItemEmoji}>{shortnameToUnicode(`:${item}:`)}</Text>;
-};
-
-MentionEmoji.propTypes = {
-	item: PropTypes.object
+	return <CustomEmoji style={styles.mentionItemCustomEmoji} emoji={item} />;
 };
 
 export default MentionEmoji;

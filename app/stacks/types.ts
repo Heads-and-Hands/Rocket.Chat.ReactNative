@@ -1,61 +1,92 @@
 import { NavigatorScreenParams } from '@react-navigation/core';
 import { TextInputProps } from 'react-native';
-import Model from '@nozbe/watermelondb/Model';
 
+import { IItem } from '../views/TeamChannelsView';
 import { IOptionsField } from '../views/NotificationPreferencesView/options';
 import { IServer } from '../definitions/IServer';
 import { IAttachment } from '../definitions/IAttachment';
-import { IMessage } from '../definitions/IMessage';
-import { IRoom, RoomType } from '../definitions/IRoom';
+import { IMessage, TAnyMessageModel, TMessageModel } from '../definitions/IMessage';
+import { ISubscription, SubscriptionType, TSubscriptionModel } from '../definitions/ISubscription';
+import { ICannedResponse } from '../definitions/ICannedResponse';
+import { TDataSelect } from '../definitions/IDataSelect';
+import { ModalStackParamList } from './MasterDetailStack/types';
+import { TThreadModel } from '../definitions';
+import { ILivechatDepartment } from '../definitions/ILivechatDepartment';
+import { ILivechatTag } from '../definitions/ILivechatTag';
+import { TChangeAvatarViewContext } from '../definitions/TChangeAvatarViewContext';
 
 export type ChatsStackParamList = {
+	ModalStackNavigator: NavigatorScreenParams<ModalStackParamList>;
+	E2ESaveYourPasswordStackNavigator: NavigatorScreenParams<E2ESaveYourPasswordStackParamList>;
+	E2EEnterYourPasswordStackNavigator: NavigatorScreenParams<E2EEnterYourPasswordStackParamList>;
+	SettingsView: any;
+	NewMessageStackNavigator: any;
+	NewMessageStack: undefined;
 	RoomsListView: undefined;
-	RoomView: {
-		rid: string;
-		t: RoomType;
-		tmid?: string;
-		message?: string;
-		name?: string;
-		fname?: string;
-		prid?: string;
-		room: IRoom;
-		jumpToMessageId?: string;
-		jumpToThreadId?: string;
-		roomUserId?: string;
-	};
+	RoomView:
+		| {
+				rid: string;
+				t: SubscriptionType;
+				tmid?: string;
+				message?: TMessageModel;
+				name?: string;
+				fname?: string;
+				prid?: string;
+				room?: TSubscriptionModel | { rid: string; t: string; name?: string; fname?: string; prid?: string };
+				jumpToMessageId?: string;
+				jumpToThreadId?: string;
+				roomUserId?: string | null;
+				usedCannedResponse?: string;
+				status?: string;
+				replyInDM?: TAnyMessageModel;
+		  }
+		| undefined; // Navigates back to RoomView already on stack
 	RoomActionsView: {
-		room: IRoom;
-		member: any;
+		room: TSubscriptionModel;
+		member?: any;
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		joined: boolean;
+		omnichannelPermissions?: {
+			canForwardGuest: boolean;
+			canReturnQueue: boolean;
+			canViewCannedResponse: boolean;
+			canPlaceLivechatOnHold: boolean;
+		};
 	};
 	SelectListView: {
-		data: any;
+		data?: TDataSelect[];
 		title: string;
-		infoText: string;
-		nextAction: Function;
-		showAlert: boolean;
-		isSearch: boolean;
-		onSearch: Function;
+		infoText?: string;
+		nextAction: (selected: string[]) => void;
+		showAlert?: () => void;
+		isSearch?: boolean;
+		onSearch?: (text: string) => Promise<TDataSelect[] | any>;
 		isRadio?: boolean;
 	};
 	RoomInfoView: {
-		room: IRoom;
-		member: any;
+		room?: ISubscription;
+		member?: any;
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
+		showCloseModal?: boolean;
+		fromRid?: string;
 	};
 	RoomInfoEditView: {
 		rid: string;
 	};
 	RoomMembersView: {
 		rid: string;
-		room: IRoom;
+		room: ISubscription;
+		joined?: boolean;
+	};
+	DiscussionsView: {
+		rid: string;
+		t: SubscriptionType;
 	};
 	SearchMessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		encrypted?: boolean;
 		showCloseModal?: boolean;
 	};
@@ -64,7 +95,8 @@ export type ChatsStackParamList = {
 		showButton?: boolean;
 		title?: string;
 		buttonText?: string;
-		nextAction?: Function;
+		showSkipText?: boolean;
+		nextAction?(): void;
 	};
 	InviteUsersView: {
 		rid: string;
@@ -74,39 +106,48 @@ export type ChatsStackParamList = {
 	};
 	MessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 		name: string;
 	};
 	AutoTranslateView: {
 		rid: string;
-		room: IRoom;
+		room: TSubscriptionModel;
 	};
 	DirectoryView: undefined;
 	NotificationPrefView: {
 		rid: string;
-		room: Model;
+		room: TSubscriptionModel;
 	};
 	ForwardLivechatView: {
 		rid: string;
 	};
+	CloseLivechatView: {
+		rid: string;
+		departmentId?: string;
+		departmentInfo?: ILivechatDepartment;
+		tagsList?: ILivechatTag[];
+	};
 	LivechatEditView: {
-		room: IRoom;
+		room: ISubscription;
 		roomUser: any; // TODO: Change
 	};
 	PickerView: {
 		title: string;
 		data: IOptionsField[];
-		value?: any; // TODO: Change
-		onChangeText?: ((text: string) => IOptionsField[]) | ((term?: string) => Promise<any>);
+		value?: string;
+		onSearch?: (text?: string) => Promise<any>;
+		onEndReached?: (text: string, offset?: number) => Promise<any>;
+		total?: number;
 		goBack?: boolean;
 		onChangeValue: Function;
 	};
 	ThreadMessagesView: {
 		rid: string;
-		t: RoomType;
+		t: SubscriptionType;
 	};
 	TeamChannelsView: {
 		teamId: string;
+		joined: boolean;
 	};
 	CreateChannelView: {
 		isTeam?: boolean; // TODO: To check
@@ -114,11 +155,11 @@ export type ChatsStackParamList = {
 	};
 	AddChannelTeamView: {
 		teamId?: string;
-		teamChannels: []; // TODO: Change
+		teamChannels: IItem[];
 	};
 	AddExistingChannelView: {
 		teamId?: string;
-		teamChannels: []; // TODO: Change
+		teamChannels: IItem[];
 	};
 	MarkdownTableView: {
 		renderRows: (drawExtraBorders?: boolean) => JSX.Element;
@@ -132,13 +173,20 @@ export type ChatsStackParamList = {
 		rid: string;
 	};
 	CannedResponseDetail: {
-		cannedResponse: {
-			shortcut: string;
-			text: string;
-			scopeName: string;
-			tags: string[];
-		};
-		room: IRoom;
+		cannedResponse: ICannedResponse;
+		room: ISubscription;
+	};
+	JitsiMeetView: {
+		rid: string;
+		url: string;
+		onlyAudio?: boolean;
+		videoConf?: boolean;
+	};
+	ChangeAvatarView: {
+		context: TChangeAvatarViewContext;
+		titleHeader?: string;
+		room?: ISubscription;
+		t?: SubscriptionType;
 	};
 };
 
@@ -153,6 +201,12 @@ export type ProfileStackParamList = {
 		onChangeText?: TextInputProps['onChangeText'];
 		goBack?: Function;
 		onChangeValue: Function;
+	};
+	ChangeAvatarView: {
+		context: TChangeAvatarViewContext;
+		titleHeader?: string;
+		room?: ISubscription;
+		t?: SubscriptionType;
 	};
 };
 
@@ -193,12 +247,12 @@ export type NewMessageStackParamList = {
 		buttonText?: string;
 		nextAction?: Function;
 	}; // TODO: Change
-	CreateChannelView: {
+	CreateChannelView?: {
 		isTeam?: boolean; // TODO: To check
 		teamId?: string;
 	};
 	CreateDiscussionView: {
-		channel: IRoom;
+		channel: ISubscription;
 		message: IMessage;
 		showCloseModal: boolean;
 	};
@@ -230,16 +284,14 @@ export type InsideStackParamList = {
 		isShareExtension: boolean;
 		serverInfo: IServer;
 		text: string;
-		room: IRoom;
-		thread: any; // TODO: Change
+		room: TSubscriptionModel;
+		thread: TThreadModel;
+		replying?: boolean;
+		replyingMessage?: IMessage;
+		closeReply?: Function;
 	};
 	ModalBlockView: {
 		data: any; // TODO: Change;
-	};
-	JitsiMeetView: {
-		rid: string;
-		url: string;
-		onlyAudio?: boolean;
 	};
 };
 
@@ -258,8 +310,14 @@ export type OutsideParamList = {
 	};
 	RegisterView: {
 		title: string;
+		username?: string;
 	};
 	LegalView: undefined;
+	AuthenticationWebView: {
+		authType: string;
+		url: string;
+		ssoToken?: string;
+	};
 };
 
 export type OutsideModalParamList = {

@@ -1,87 +1,71 @@
-import React from 'react';
+import React, { useEffect, useLayoutEffect } from 'react';
 import { FlatList } from 'react-native';
-import { StackNavigationOptions, StackNavigationProp } from '@react-navigation/stack';
-import { connect } from 'react-redux';
-import { Q, Model } from '@nozbe/watermelondb';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { Q } from '@nozbe/watermelondb';
+import { useNavigation } from '@react-navigation/native';
 
 import I18n from '../i18n';
 import StatusBar from '../containers/StatusBar';
-import ServerItem, { ROW_HEIGHT } from '../presentation/ServerItem';
-import RocketChat from '../lib/rocketchat';
+import ServerItem, { ROW_HEIGHT } from '../containers/ServerItem';
+import { shareExtensionInit } from '../lib/methods/shareExtension';
 import database from '../lib/database';
 import SafeAreaView from '../containers/SafeAreaView';
 import * as List from '../containers/List';
+import { ShareInsideStackParamList } from '../definitions/navigationTypes';
+import { TServerModel } from '../definitions';
+import { useAppSelector } from '../lib/hooks';
 
 const getItemLayout = (data: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index });
-const keyExtractor = (item: IServer) => item.id;
+const keyExtractor = (item: TServerModel) => item.id;
 
-interface IServer extends Model {
-	id: string;
-	iconURL?: string;
-	name?: string;
-}
+const SelectServerView = () => {
+	const [servers, setServers] = React.useState<TServerModel[]>([]);
 
-interface ISelectServerViewState {
-	servers: IServer[];
-}
+	const server = useAppSelector(state => state.share.server.server);
+	const navigation = useNavigation<StackNavigationProp<ShareInsideStackParamList, 'SelectServerView'>>();
 
-interface ISelectServerViewProps {
-	navigation: StackNavigationProp<any, 'SelectServerView'>;
-	server: string;
-}
+	useLayoutEffect(() => {
+		navigation.setOptions({
+			title: I18n.t('Select_Server')
+		});
+	}, [navigation]);
 
-class SelectServerView extends React.Component<ISelectServerViewProps, ISelectServerViewState> {
-	static navigationOptions = (): StackNavigationOptions => ({
-		title: I18n.t('Select_Server')
-	});
+	useEffect(() => {
+		const init = async () => {
+			const serversDB = database.servers;
+			const serversCollection = serversDB.get('servers');
+			const serversResult = await serversCollection.query(Q.where('rooms_updated_at', Q.notEq(null))).fetch();
+			setServers(serversResult);
+		};
+		init();
+	}, []);
 
-	state = { servers: [] as IServer[] };
-
-	async componentDidMount() {
-		const serversDB = database.servers;
-		const serversCollection = serversDB.get('servers');
-		const servers: IServer[] = await serversCollection.query(Q.where('rooms_updated_at', Q.notEq(null))).fetch();
-		this.setState({ servers });
-	}
-
-	select = async (server: string) => {
-		const { server: currentServer, navigation } = this.props;
-
+	const select = async (serverSelected: string) => {
 		navigation.navigate('ShareListView');
-		if (currentServer !== server) {
-			await RocketChat.shareExtensionInit(server);
+		if (serverSelected !== server) {
+			await shareExtensionInit(serverSelected);
 		}
 	};
 
-	renderItem = ({ item }: { item: IServer }) => {
-		const { server } = this.props;
-		return <ServerItem onPress={() => this.select(item.id)} item={item} hasCheck={item.id === server} />;
-	};
+	return (
+		<SafeAreaView>
+			<StatusBar />
+			<FlatList
+				data={servers}
+				renderItem={({ item }: { item: TServerModel }) => (
+					<ServerItem onPress={() => select(item.id)} item={item} hasCheck={item.id === server} />
+				)}
+				keyExtractor={keyExtractor}
+				getItemLayout={getItemLayout} // Refactor row_height
+				ItemSeparatorComponent={List.Separator}
+				contentContainerStyle={List.styles.contentContainerStyleFlatList}
+				ListHeaderComponent={List.Separator}
+				ListFooterComponent={List.Separator}
+				removeClippedSubviews
+				keyboardShouldPersistTaps='always'
+			/>
+		</SafeAreaView>
+	);
+};
 
-	render() {
-		const { servers } = this.state;
-		return (
-			<SafeAreaView>
-				<StatusBar />
-				<FlatList
-					data={servers}
-					keyExtractor={keyExtractor}
-					renderItem={this.renderItem}
-					getItemLayout={getItemLayout} // Refactor row_height
-					contentContainerStyle={List.styles.contentContainerStyleFlatList}
-					ItemSeparatorComponent={List.Separator}
-					ListHeaderComponent={List.Separator}
-					ListFooterComponent={List.Separator}
-					removeClippedSubviews
-					keyboardShouldPersistTaps='always'
-				/>
-			</SafeAreaView>
-		);
-	}
-}
-
-const mapStateToProps = ({ share }: any) => ({
-	server: share.server.server
-});
-
-export default connect(mapStateToProps)(SelectServerView);
+export default SelectServerView;

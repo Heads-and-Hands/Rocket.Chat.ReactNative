@@ -1,19 +1,18 @@
 import React from 'react';
 import { Platform, StyleSheet, Text } from 'react-native';
-import Touchable from 'react-native-platform-touchable';
+import { PlatformPressable } from '@react-navigation/elements';
 
-import { CustomIcon } from '../../lib/Icons';
-import { withTheme } from '../../theme';
-import { themes } from '../../constants/colors';
+import { CustomIcon, ICustomIcon, TIconsName } from '../CustomIcon';
+import { useTheme } from '../../theme';
 import sharedStyles from '../../views/Styles';
 
-interface IHeaderButtonItem {
-	title: string;
-	iconName: string;
-	onPress(): void;
-	testID: string;
-	theme: string;
-	badge(): void;
+export interface IHeaderButtonItem extends Omit<ICustomIcon, 'name' | 'size' | 'color'> {
+	title?: string;
+	iconName?: TIconsName;
+	onPress?: <T>(arg: T) => void;
+	testID?: string;
+	badge?(): void;
+	color?: string;
 }
 
 export const BUTTON_HIT_SLOP = {
@@ -25,7 +24,7 @@ export const BUTTON_HIT_SLOP = {
 
 const styles = StyleSheet.create({
 	container: {
-		marginHorizontal: 6
+		padding: 6
 	},
 	title: {
 		...Platform.select({
@@ -40,19 +39,24 @@ const styles = StyleSheet.create({
 	}
 });
 
-const Item = ({ title, iconName, onPress, testID, theme, badge }: IHeaderButtonItem) => (
-	<Touchable onPress={onPress} testID={testID} hitSlop={BUTTON_HIT_SLOP} style={styles.container}>
-		<>
-			{iconName ? (
-				<CustomIcon name={iconName} size={24} color={themes[theme].headerTintColor} />
-			) : (
-				<Text style={[styles.title, { color: themes[theme].headerTintColor }]}>{title}</Text>
-			)}
-			{badge ? badge() : null}
-		</>
-	</Touchable>
-);
+const Item = ({ title, iconName, onPress, testID, badge, color, ...props }: IHeaderButtonItem): React.ReactElement => {
+	const { colors } = useTheme();
+	return (
+		<PlatformPressable onPress={onPress} testID={testID} hitSlop={BUTTON_HIT_SLOP} style={styles.container}>
+			<>
+				{iconName ? (
+					<CustomIcon name={iconName} size={24} color={color || colors.headerTintColor} {...props} />
+				) : (
+					<Text style={[styles.title, { color: color || colors.headerTintColor }]} {...props}>
+						{title}
+					</Text>
+				)}
+				{badge ? badge() : null}
+			</>
+		</PlatformPressable>
+	);
+};
 
 Item.displayName = 'HeaderButton.Item';
 
-export default withTheme(Item);
+export default Item;

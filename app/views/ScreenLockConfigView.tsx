@@ -2,27 +2,21 @@ import React from 'react';
 import { Switch } from 'react-native';
 import { connect } from 'react-redux';
 import { StackNavigationOptions } from '@react-navigation/stack';
-import Model from '@nozbe/watermelondb/Model';
 import { Subscription } from 'rxjs';
 
 import I18n from '../i18n';
-import { withTheme } from '../theme';
-import { SWITCH_TRACK_COLOR, themes } from '../constants/colors';
+import { TSupportedThemes, withTheme } from '../theme';
 import StatusBar from '../containers/StatusBar';
 import * as List from '../containers/List';
 import database from '../lib/database';
-import { changePasscode, checkHasPasscode, supportedBiometryLabel } from '../utils/localAuthentication';
-import { DEFAULT_AUTO_LOCK } from '../constants/localAuthentication';
+import { changePasscode, checkHasPasscode, supportedBiometryLabel } from '../lib/methods/helpers/localAuthentication';
+import { BIOMETRY_ENABLED_KEY, DEFAULT_AUTO_LOCK, themes, SWITCH_TRACK_COLOR } from '../lib/constants';
 import SafeAreaView from '../containers/SafeAreaView';
-import { events, logEvent } from '../utils/log';
+import { events, logEvent } from '../lib/methods/helpers/log';
+import userPreferences from '../lib/methods/userPreferences';
+import { IApplicationState, TServerModel } from '../definitions';
 
 const DEFAULT_BIOMETRY = false;
-
-interface IServerRecords extends Model {
-	autoLock?: boolean;
-	autoLockTime?: number;
-	biometry?: boolean;
-}
 
 interface IItem {
 	title: string;
@@ -31,21 +25,21 @@ interface IItem {
 }
 
 interface IScreenLockConfigViewProps {
-	theme: string;
+	theme: TSupportedThemes;
 	server: string;
 	Force_Screen_Lock: boolean;
 	Force_Screen_Lock_After: number;
 }
 
 interface IScreenLockConfigViewState {
-	autoLock?: boolean;
+	autoLock: boolean;
 	autoLockTime?: number | null;
-	biometry?: boolean;
-	biometryLabel: null;
+	biometry: boolean;
+	biometryLabel: string | null;
 }
 
 class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, IScreenLockConfigViewState> {
-	private serverRecord?: IServerRecords;
+	private serverRecord?: TServerModel;
 
 	private observable?: Subscription;
 
@@ -99,43 +93,36 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 		const serversCollection = serversDB.get('servers');
 		try {
 			this.serverRecord = await serversCollection.find(server);
-			this.setState({
-				autoLock: this.serverRecord?.autoLock,
-				autoLockTime: this.serverRecord?.autoLockTime === null ? DEFAULT_AUTO_LOCK : this.serverRecord?.autoLockTime,
-				biometry: this.serverRecord.biometry === null ? DEFAULT_BIOMETRY : this.serverRecord.biometry
-			});
+			this.setState(
+				{
+					autoLock: this.serverRecord?.autoLock,
+					autoLockTime: this.serverRecord?.autoLockTime === null ? DEFAULT_AUTO_LOCK : this.serverRecord?.autoLockTime
+				},
+				() => this.hasBiometry()
+			);
 		} catch (error) {
 			// Do nothing
 		}
 
 		const biometryLabel = await supportedBiometryLabel();
 		this.setState({ biometryLabel });
-
-		this.observe();
-	};
-
-	/*
-	 * We should observe biometry value
-	 * because it can be changed by PasscodeChange
-	 * when the user set his first passcode
-	 */
-	observe = () => {
-		this.observable = this.serverRecord?.observe()?.subscribe(({ biometry }) => {
-			this.setState({ biometry });
-		});
 	};
 
 	save = async () => {
 		logEvent(events.SLC_SAVE_SCREEN_LOCK);
-		const { autoLock, autoLockTime, biometry } = this.state;
+		const { autoLock, autoLockTime } = this.state;
 		const serversDB = database.servers;
 		await serversDB.write(async () => {
 			await this.serverRecord?.update(record => {
 				record.autoLock = autoLock;
 				record.autoLockTime = autoLockTime === null ? DEFAULT_AUTO_LOCK : autoLockTime;
-				record.biometry = biometry === null ? DEFAULT_BIOMETRY : biometry;
 			});
 		});
+	};
+
+	hasBiometry = () => {
+		const biometry = userPreferences.getBool(BIOMETRY_ENABLED_KEY) ?? DEFAULT_BIOMETRY;
+		this.setState({ biometry });
 	};
 
 	changePasscode = async ({ force }: { force: boolean }) => {
@@ -151,7 +138,8 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 				const { autoLock } = this.state;
 				if (autoLock) {
 					try {
-						await checkHasPasscode({ force: false, serverRecord: this.serverRecord });
+						await checkHasPasscode({ force: false });
+						this.hasBiometry();
 					} catch {
 						this.toggleAutoLock();
 					}
@@ -165,7 +153,10 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 		logEvent(events.SLC_TOGGLE_BIOMETRY);
 		this.setState(
 			({ biometry }) => ({ biometry: !biometry }),
-			() => this.save()
+			() => {
+				const { biometry } = this.state;
+				userPreferences.setBool(BIOMETRY_ENABLED_KEY, biometry);
+			}
 		);
 	};
 
@@ -191,7 +182,7 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 				<List.Item
 					title={title}
 					onPress={() => this.changeAutoLockTime(value)}
-					right={this.isSelected(value) ? this.renderIcon : null}
+					right={() => (this.isSelected(value) ? this.renderIcon() : null)}
 					disabled={disabled}
 					translateTitle={false}
 				/>
@@ -238,7 +229,7 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 		return (
 			<List.Section>
 				<List.Separator />
-				{items.map(item => this.renderItem({ item }))}
+				<>{items.map(item => this.renderItem({ item }))}</>
 			</List.Section>
 		);
 	};
@@ -287,10 +278,10 @@ class ScreenLockConfigView extends React.Component<IScreenLockConfigViewProps, I
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	server: state.server.server,
-	Force_Screen_Lock: state.settings.Force_Screen_Lock,
-	Force_Screen_Lock_After: state.settings.Force_Screen_Lock_After
+	Force_Screen_Lock: state.settings.Force_Screen_Lock as boolean,
+	Force_Screen_Lock_After: state.settings.Force_Screen_Lock_After as number
 });
 
 export default connect(mapStateToProps)(withTheme(ScreenLockConfigView));

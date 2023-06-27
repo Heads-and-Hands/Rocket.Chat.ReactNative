@@ -1,115 +1,72 @@
-import React from 'react';
+import { useNavigation } from '@react-navigation/native';
+import React, { useLayoutEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
-import { connect } from 'react-redux';
-import { Dispatch } from 'redux';
-import { StackNavigationOptions, StackNavigationProp } from '@react-navigation/stack';
+import { useDispatch } from 'react-redux';
 
-import I18n from '../i18n';
-import { withTheme } from '../theme';
+import { encryptionDecodeKey } from '../actions/encryption';
 import Button from '../containers/Button';
-import { themes } from '../constants/colors';
-import TextInput from '../containers/TextInput';
-import SafeAreaView from '../containers/SafeAreaView';
 import * as HeaderButton from '../containers/HeaderButton';
-import { encryptionDecodeKey as encryptionDecodeKeyAction } from '../actions/encryption';
-import scrollPersistTaps from '../utils/scrollPersistTaps';
-import KeyboardView from '../presentation/KeyboardView';
+import KeyboardView from '../containers/KeyboardView';
+import SafeAreaView from '../containers/SafeAreaView';
 import StatusBar from '../containers/StatusBar';
-import { events, logEvent } from '../utils/log';
+import { FormTextInput } from '../containers/TextInput';
+import I18n from '../i18n';
+import { events, logEvent } from '../lib/methods/helpers/log';
+import scrollPersistTaps from '../lib/methods/helpers/scrollPersistTaps';
+import { useTheme } from '../theme';
 import sharedStyles from './Styles';
-import { E2EEnterYourPasswordStackParamList } from '../stacks/types';
 
 const styles = StyleSheet.create({
-	container: {
-		padding: 28
-	},
 	info: {
-		fontSize: 14,
-		marginVertical: 8,
+		fontSize: 16,
+		marginVertical: 4,
 		...sharedStyles.textRegular
 	}
 });
 
-interface IE2EEnterYourPasswordViewState {
-	password: string;
-}
+const E2EEnterYourPasswordView = (): React.ReactElement => {
+	const [password, setPassword] = useState('');
+	const { colors } = useTheme();
+	const navigation = useNavigation();
+	const dispatch = useDispatch();
 
-interface IE2EEnterYourPasswordViewProps {
-	encryptionDecodeKey: (password: string) => void;
-	theme: string;
-	navigation: StackNavigationProp<E2EEnterYourPasswordStackParamList, 'E2EEnterYourPasswordView'>;
-}
+	useLayoutEffect(() => {
+		navigation.setOptions({
+			headerLeft: () => <HeaderButton.CloseModal testID='e2e-enter-your-password-view-close' />,
+			title: I18n.t('Enter_Your_E2E_Password')
+		});
+	}, [navigation]);
 
-class E2EEnterYourPasswordView extends React.Component<IE2EEnterYourPasswordViewProps, IE2EEnterYourPasswordViewState> {
-	private passwordInput?: TextInput;
-
-	static navigationOptions = ({ navigation }: Pick<IE2EEnterYourPasswordViewProps, 'navigation'>): StackNavigationOptions => ({
-		headerLeft: () => <HeaderButton.CloseModal navigation={navigation} testID='e2e-enter-your-password-view-close' />,
-		title: I18n.t('Enter_Your_E2E_Password')
-	});
-
-	constructor(props: IE2EEnterYourPasswordViewProps) {
-		super(props);
-		this.state = {
-			password: ''
-		};
-	}
-
-	submit = () => {
+	const submit = () => {
 		logEvent(events.E2E_ENTER_PW_SUBMIT);
-		const { password } = this.state;
-		const { encryptionDecodeKey } = this.props;
-		encryptionDecodeKey(password);
+		dispatch(encryptionDecodeKey(password));
 	};
 
-	render() {
-		const { password } = this.state;
-		const { theme } = this.props;
+	return (
+		<KeyboardView
+			style={{ backgroundColor: colors.backgroundColor }}
+			contentContainerStyle={sharedStyles.container}
+			keyboardVerticalOffset={128}
+		>
+			<StatusBar />
+			<ScrollView {...scrollPersistTaps} style={sharedStyles.container} contentContainerStyle={sharedStyles.containerScrollView}>
+				<SafeAreaView style={{ backgroundColor: colors.backgroundColor }} testID='e2e-enter-your-password-view'>
+					<FormTextInput
+						placeholder={I18n.t('Password')}
+						returnKeyType='send'
+						secureTextEntry
+						onSubmitEditing={submit}
+						onChangeText={setPassword}
+						testID='e2e-enter-your-password-view-password'
+						textContentType='password'
+					/>
+					<Button onPress={submit} title={I18n.t('Confirm')} disabled={!password} testID='e2e-enter-your-password-view-confirm' />
+					<Text style={[styles.info, { color: colors.bodyText }]}>{I18n.t('Enter_Your_Encryption_Password_desc1')}</Text>
+					<Text style={[styles.info, { color: colors.bodyText }]}>{I18n.t('Enter_Your_Encryption_Password_desc2')}</Text>
+				</SafeAreaView>
+			</ScrollView>
+		</KeyboardView>
+	);
+};
 
-		return (
-			<KeyboardView
-				style={{ backgroundColor: themes[theme].backgroundColor }}
-				contentContainerStyle={sharedStyles.container}
-				keyboardVerticalOffset={128}>
-				<StatusBar />
-				<ScrollView
-					{...scrollPersistTaps}
-					style={sharedStyles.container}
-					contentContainerStyle={sharedStyles.containerScrollView}>
-					<SafeAreaView
-						style={[styles.container, { backgroundColor: themes[theme].backgroundColor }]}
-						testID='e2e-enter-your-password-view'>
-						<TextInput
-							inputRef={(e: TextInput) => {
-								this.passwordInput = e;
-							}}
-							placeholder={I18n.t('Password')}
-							returnKeyType='send'
-							secureTextEntry
-							onSubmitEditing={this.submit}
-							onChangeText={value => this.setState({ password: value })}
-							testID='e2e-enter-your-password-view-password'
-							textContentType='password'
-							autoCompleteType='password'
-							theme={theme}
-						/>
-						<Button
-							onPress={this.submit}
-							title={I18n.t('Confirm')}
-							disabled={!password}
-							theme={theme}
-							testID='e2e-enter-your-password-view-confirm'
-						/>
-						<Text style={[styles.info, { color: themes[theme].bodyText }]}>{I18n.t('Enter_Your_Encryption_Password_desc1')}</Text>
-						<Text style={[styles.info, { color: themes[theme].bodyText }]}>{I18n.t('Enter_Your_Encryption_Password_desc2')}</Text>
-					</SafeAreaView>
-				</ScrollView>
-			</KeyboardView>
-		);
-	}
-}
-
-const mapDispatchToProps = (dispatch: Dispatch) => ({
-	encryptionDecodeKey: (password: string) => dispatch(encryptionDecodeKeyAction(password))
-});
-export default connect(null, mapDispatchToProps)(withTheme(E2EEnterYourPasswordView));
+export default E2EEnterYourPasswordView;

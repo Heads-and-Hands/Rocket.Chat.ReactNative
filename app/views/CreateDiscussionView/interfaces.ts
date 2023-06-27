@@ -1,32 +1,37 @@
-import { RouteProp } from '@react-navigation/core';
-import { StackNavigationProp } from '@react-navigation/stack';
-
 import { NewMessageStackParamList } from '../../stacks/types';
+import { ISubscription, SubscriptionType } from '../../definitions/ISubscription';
+import { IBaseScreen, IMessage, ISearchLocal, IUser } from '../../definitions';
 
-export interface ICreateChannelViewProps {
-	navigation: StackNavigationProp<NewMessageStackParamList, 'CreateDiscussionView'>;
-	route: RouteProp<NewMessageStackParamList, 'CreateDiscussionView'>;
+export interface IResult {
+	rid: string;
+	t: SubscriptionType;
+	prid: string;
+}
+
+export interface IError {
+	reason: string;
+}
+export interface ICreateChannelViewProps extends IBaseScreen<NewMessageStackParamList, 'CreateDiscussionView'> {
 	server: string;
-	user: {
-		id: string;
-		token: string;
-	};
+	user: IUser;
 	create: Function;
 	loading: boolean;
-	result: {
-		rid: string;
-		t: string;
-		prid: string;
-	};
+	result: IResult;
 	failure: boolean;
-	error: {
-		reason: string;
-	};
-	theme: string;
+	error: IError;
 	isMasterDetail: boolean;
 	blockUnauthenticatedAccess: boolean;
 	serverVersion: string;
 	encryptionEnabled: boolean;
+}
+
+export interface ICreateChannelViewState {
+	channel: ISubscription | ISearchLocal;
+	message: IMessage;
+	name?: string;
+	users: string[];
+	reply: string;
+	encrypted: boolean;
 }
 
 export interface ICreateDiscussionViewSelectChannel {
@@ -37,7 +42,6 @@ export interface ICreateDiscussionViewSelectChannel {
 	onChannelSelect: Function;
 	blockUnauthenticatedAccess: boolean;
 	serverVersion: string;
-	theme: string;
 }
 
 export interface ICreateDiscussionViewSelectUsers {
@@ -48,5 +52,4 @@ export interface ICreateDiscussionViewSelectUsers {
 	onUserSelect: Function;
 	blockUnauthenticatedAccess: boolean;
 	serverVersion: string;
-	theme: string;
 }

@@ -1,57 +1,55 @@
 import React from 'react';
 import { StackNavigationOptions, StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
-import { FlatList, View } from 'react-native';
+import { FlatList } from 'react-native';
 import { connect } from 'react-redux';
 import { Q } from '@nozbe/watermelondb';
 
 import * as List from '../containers/List';
 import database from '../lib/database';
-import RocketChat from '../lib/rocketchat';
 import I18n from '../i18n';
-import log, { events, logEvent } from '../utils/log';
+import log, { events, logEvent } from '../lib/methods/helpers/log';
 import SearchBox from '../containers/SearchBox';
 import * as HeaderButton from '../containers/HeaderButton';
 import StatusBar from '../containers/StatusBar';
-import { themes } from '../constants/colors';
-import { withTheme } from '../theme';
+import { themes } from '../lib/constants';
+import { TSupportedThemes, withTheme } from '../theme';
 import SafeAreaView from '../containers/SafeAreaView';
-import Loading from '../containers/Loading';
-import { animateNextTransition } from '../utils/layoutAnimation';
-import { goRoom } from '../utils/goRoom';
-import { showErrorAlert } from '../utils/info';
-import debounce from '../utils/debounce';
+import { sendLoadingEvent } from '../containers/Loading';
+import { animateNextTransition } from '../lib/methods/helpers/layoutAnimation';
+import { showErrorAlert } from '../lib/methods/helpers/info';
 import { ChatsStackParamList } from '../stacks/types';
+import { TSubscriptionModel, SubscriptionType, IApplicationState } from '../definitions';
+import { getRoomTitle, hasPermission, debounce } from '../lib/methods/helpers';
+import { Services } from '../lib/services';
 
 interface IAddExistingChannelViewState {
-	// TODO: refactor with Room Model
-	search: any[];
-	channels: any[];
+	search: TSubscriptionModel[];
+	channels: TSubscriptionModel[];
 	selected: string[];
-	loading: boolean;
 }
 
 interface IAddExistingChannelViewProps {
 	navigation: StackNavigationProp<ChatsStackParamList, 'AddExistingChannelView'>;
 	route: RouteProp<ChatsStackParamList, 'AddExistingChannelView'>;
-	theme: string;
+	theme: TSupportedThemes;
 	isMasterDetail: boolean;
-	addTeamChannelPermission: string[];
+	addTeamChannelPermission?: string[];
 }
 
 const QUERY_SIZE = 50;
 
 class AddExistingChannelView extends React.Component<IAddExistingChannelViewProps, IAddExistingChannelViewState> {
-	private teamId?: string;
+	private teamId: string;
+
 	constructor(props: IAddExistingChannelViewProps) {
 		super(props);
 		this.query();
-		this.teamId = props.route?.params?.teamId;
+		this.teamId = props.route?.params?.teamId ?? '';
 		this.state = {
 			search: [],
 			channels: [],
-			selected: [],
-			loading: false
+			selected: []
 		};
 		this.setHeader();
 	}
@@ -82,7 +80,7 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 		try {
 			const { addTeamChannelPermission } = this.props;
 			const db = database.active;
-			const channels = await db.collections
+			const channels = await db
 				.get('subscriptions')
 				.query(
 					Q.where('team_id', ''),
@@ -93,14 +91,13 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 				)
 				.fetch();
 
-			// TODO: Refactor with Room Model
-			const asyncFilter = async (channelsArray: any[]) => {
+			const asyncFilter = async (channelsArray: TSubscriptionModel[]) => {
 				const results = await Promise.all(
-					channelsArray.map(async (channel: any) => {
+					channelsArray.map(async channel => {
 						if (channel.prid) {
 							return false;
 						}
-						const permissions = await RocketChat.hasPermission([addTeamChannelPermission], channel.rid);
+						const permissions = await hasPermission([addTeamChannelPermission], channel.rid);
 						if (!permissions[0]) {
 							return false;
 						}
@@ -128,31 +125,27 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 
 	submit = async () => {
 		const { selected } = this.state;
-		const { isMasterDetail } = this.props;
+		const { navigation } = this.props;
 
-		this.setState({ loading: true });
+		sendLoadingEvent({ visible: true });
 		try {
 			logEvent(events.CT_ADD_ROOM_TO_TEAM);
-			const result = await RocketChat.addRoomsToTeam({ rooms: selected, teamId: this.teamId });
+			const result = await Services.addRoomsToTeam({ rooms: selected, teamId: this.teamId });
 			if (result.success) {
-				this.setState({ loading: false });
-				goRoom({ item: result, isMasterDetail });
+				sendLoadingEvent({ visible: false });
+				// Expect that after you add an existing channel to a team, the user should move back to the team
+				navigation.navigate('RoomView');
 			}
 		} catch (e: any) {
 			logEvent(events.CT_ADD_ROOM_TO_TEAM_F);
 			showErrorAlert(I18n.t(e.data.error), I18n.t('Add_Existing_Channel'), () => {});
-			this.setState({ loading: false });
+			sendLoadingEvent({ visible: false });
 		}
 	};
 
-	renderHeader = () => {
-		const { theme } = this.props;
-		return (
-			<View style={{ backgroundColor: themes[theme].auxiliaryBackground }}>
-				<SearchBox onChangeText={(text: string) => this.onSearchChangeText(text)} testID='add-existing-channel-view-search' />
-			</View>
-		);
-	};
+	renderHeader = () => (
+		<SearchBox onChangeText={(text: string) => this.onSearchChangeText(text)} testID='add-existing-channel-view-search' />
+	);
 
 	isChecked = (rid: string) => {
 		const { selected } = this.state;
@@ -173,14 +166,13 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 		}
 	};
 
-	// TODO: refactor with Room Model
-	renderItem = ({ item }: { item: any }) => {
+	renderItem = ({ item }: { item: TSubscriptionModel }) => {
 		const isChecked = this.isChecked(item.rid);
 		// TODO: reuse logic inside RoomTypeIcon
-		const icon = item.t === 'p' && !item.teamId ? 'channel-private' : 'channel-public';
+		const icon = item.t === SubscriptionType.DIRECT && !item?.teamId ? 'channel-private' : 'channel-public';
 		return (
 			<List.Item
-				title={RocketChat.getRoomTitle(item)}
+				title={getRoomTitle(item)}
 				translateTitle={false}
 				onPress={() => this.toggleChannel(item.rid)}
 				testID={`add-existing-channel-view-item-${item.name}`}
@@ -197,7 +189,7 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 			<FlatList
 				data={search.length > 0 ? search : channels}
 				extraData={this.state}
-				keyExtractor={item => item._id}
+				keyExtractor={item => item.id}
 				ListHeaderComponent={this.renderHeader}
 				renderItem={this.renderItem}
 				ItemSeparatorComponent={List.Separator}
@@ -208,19 +200,16 @@ class AddExistingChannelView extends React.Component<IAddExistingChannelViewProp
 	};
 
 	render() {
-		const { loading } = this.state;
-
 		return (
 			<SafeAreaView testID='add-existing-channel-view'>
 				<StatusBar />
 				{this.renderList()}
-				<Loading visible={loading} />
 			</SafeAreaView>
 		);
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	isMasterDetail: state.app.isMasterDetail,
 	addTeamChannelPermission: state.permissions['add-team-channel']
 });

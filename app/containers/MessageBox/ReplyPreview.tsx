@@ -3,10 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import moment from 'moment';
 import { connect } from 'react-redux';
 
-import Markdown from '../markdown';
-import { CustomIcon } from '../../lib/Icons';
+import { MarkdownPreview } from '../markdown';
+import { CustomIcon } from '../CustomIcon';
 import sharedStyles from '../../views/Styles';
-import { themes } from '../../constants/colors';
+import { themes } from '../../lib/constants';
+import { IMessage } from '../../definitions/IMessage';
+import { useTheme } from '../../theme';
+import { IApplicationState } from '../../definitions';
 
 const styles = StyleSheet.create({
 	container: {
@@ -26,7 +29,8 @@ const styles = StyleSheet.create({
 	},
 	username: {
 		fontSize: 16,
-		...sharedStyles.textMedium
+		...sharedStyles.textMedium,
+		flexShrink: 1
 	},
 	time: {
 		fontSize: 12,
@@ -42,32 +46,19 @@ const styles = StyleSheet.create({
 
 interface IMessageBoxReplyPreview {
 	replying: boolean;
-	message: {
-		ts: Date;
-		msg: string;
-		u: any;
-	};
+	message: IMessage;
 	Message_TimeFormat: string;
 	close(): void;
 	baseUrl: string;
 	username: string;
 	getCustomEmoji: Function;
-	theme: string;
 	useRealName: boolean;
 }
 
 const ReplyPreview = React.memo(
-	({
-		message,
-		Message_TimeFormat,
-		baseUrl,
-		username,
-		replying,
-		getCustomEmoji,
-		close,
-		theme,
-		useRealName
-	}: IMessageBoxReplyPreview) => {
+	({ message, Message_TimeFormat, replying, close, useRealName }: IMessageBoxReplyPreview) => {
+		const { theme } = useTheme();
+
 		if (!replying) {
 			return null;
 		}
@@ -77,36 +68,25 @@ const ReplyPreview = React.memo(
 			<View style={[styles.container, { backgroundColor: themes[theme].messageboxBackground }]}>
 				<View style={[styles.messageContainer, { backgroundColor: themes[theme].chatComponentBackground }]}>
 					<View style={styles.header}>
-						<Text style={[styles.username, { color: themes[theme].tintColor }]}>
+						<Text numberOfLines={1} style={[styles.username, { color: themes[theme].tintColor }]}>
 							{useRealName ? message.u?.name : message.u?.username}
 						</Text>
 						<Text style={[styles.time, { color: themes[theme].auxiliaryText }]}>{time}</Text>
 					</View>
-					{/* @ts-ignore*/}
-					<Markdown
-						msg={message.msg}
-						baseUrl={baseUrl}
-						username={username}
-						getCustomEmoji={getCustomEmoji}
-						numberOfLines={1}
-						preview
-						theme={theme}
-					/>
+					<MarkdownPreview msg={message.msg} />
 				</View>
 				<CustomIcon name='close' color={themes[theme].auxiliaryText} size={20} style={styles.close} onPress={close} />
 			</View>
 		);
 	},
-	(prevProps: any, nextProps: any) =>
-		prevProps.replying === nextProps.replying &&
-		prevProps.theme === nextProps.theme &&
-		prevProps.message.id === nextProps.message.id
+	(prevProps: IMessageBoxReplyPreview, nextProps: IMessageBoxReplyPreview) =>
+		prevProps.replying === nextProps.replying && prevProps.message.id === nextProps.message.id
 );
 
-const mapStateToProps = (state: any) => ({
-	Message_TimeFormat: state.settings.Message_TimeFormat,
+const mapStateToProps = (state: IApplicationState) => ({
+	Message_TimeFormat: state.settings.Message_TimeFormat as string,
 	baseUrl: state.server.server,
-	useRealName: state.settings.UI_Use_Real_Name
+	useRealName: state.settings.UI_Use_Real_Name as boolean
 });
 
 export default connect(mapStateToProps)(ReplyPreview);

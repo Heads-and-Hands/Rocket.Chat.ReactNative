@@ -1,50 +1,42 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import styles from './styles';
-import { themes } from '../../constants/colors';
+import { useTheme } from '../../theme';
+import { ITabBarProps } from './interfaces';
+import { isIOS } from '../../lib/methods/helpers';
+import { CustomIcon } from '../CustomIcon';
 
-interface ITabBarProps {
-	goToPage: Function;
-	activeTab: number;
-	tabs: [];
-	tabEmojiStyle: object;
-	theme: string;
-}
+const TabBar = ({ activeTab, tabs, goToPage }: ITabBarProps): React.ReactElement => {
+	const { colors } = useTheme();
 
-export default class TabBar extends React.Component<Partial<ITabBarProps>> {
-	shouldComponentUpdate(nextProps: any) {
-		const { activeTab, theme } = this.props;
-		if (nextProps.activeTab !== activeTab) {
-			return true;
-		}
-		if (nextProps.theme !== theme) {
-			return true;
-		}
-		return false;
-	}
+	return (
+		<View style={styles.tabsContainer}>
+			{tabs?.map((tab, i) => (
+				<Pressable
+					key={tab}
+					onPress={() => goToPage?.(i)}
+					testID={`emoji-picker-tab-${tab}`}
+					android_ripple={{ color: colors.bannerBackground }}
+					style={({ pressed }: { pressed: boolean }) => [
+						styles.tab,
+						{
+							backgroundColor: isIOS && pressed ? colors.bannerBackground : 'transparent'
+						}
+					]}
+				>
+					<CustomIcon name={tab} size={24} color={activeTab === i ? colors.tintColor : colors.auxiliaryTintColor} />
+					<View
+						style={
+							activeTab === i
+								? [styles.activeTabLine, { backgroundColor: colors.tintColor }]
+								: [styles.tabLine, { backgroundColor: colors.borderColor }]
+						}
+					/>
+				</Pressable>
+			))}
+		</View>
+	);
+};
 
-	render() {
-		const { tabs, goToPage, tabEmojiStyle, activeTab, theme } = this.props;
-
-		return (
-			<View style={styles.tabsContainer}>
-				{tabs!.map((tab, i) => (
-					<TouchableOpacity
-						activeOpacity={0.7}
-						key={tab}
-						onPress={() => goToPage!(i)}
-						style={styles.tab}
-						testID={`reaction-picker-${tab}`}>
-						<Text style={[styles.tabEmoji, tabEmojiStyle]}>{tab}</Text>
-						{activeTab === i ? (
-							<View style={[styles.activeTabLine, { backgroundColor: themes[theme!].tintColor }]} />
-						) : (
-							<View style={styles.tabLine} />
-						)}
-					</TouchableOpacity>
-				))}
-			</View>
-		);
-	}
-}
+export default TabBar;

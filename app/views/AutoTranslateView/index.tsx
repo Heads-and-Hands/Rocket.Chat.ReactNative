@@ -1,17 +1,17 @@
 import React from 'react';
 import { FlatList, StyleSheet, Switch } from 'react-native';
-import { RouteProp } from '@react-navigation/core';
+import { Observable, Subscription } from 'rxjs';
 
 import { ChatsStackParamList } from '../../stacks/types';
-import RocketChat from '../../lib/rocketchat';
 import I18n from '../../i18n';
 import StatusBar from '../../containers/StatusBar';
 import * as List from '../../containers/List';
-import { SWITCH_TRACK_COLOR, themes } from '../../constants/colors';
+import { SWITCH_TRACK_COLOR, themes } from '../../lib/constants';
 import { withTheme } from '../../theme';
 import SafeAreaView from '../../containers/SafeAreaView';
-import { events, logEvent } from '../../utils/log';
-import { IRoom } from '../../definitions/IRoom';
+import { events, logEvent } from '../../lib/methods/helpers/log';
+import { IBaseScreen, ISubscription } from '../../definitions';
+import { Services } from '../../lib/services';
 
 const styles = StyleSheet.create({
 	list: {
@@ -19,30 +19,27 @@ const styles = StyleSheet.create({
 	}
 });
 
-interface IAutoTranslateViewProps {
-	route: RouteProp<ChatsStackParamList, 'AutoTranslateView'>;
-	theme: string;
-}
+type TAutoTranslateViewProps = IBaseScreen<ChatsStackParamList, 'AutoTranslateView'>;
 
-class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
+class AutoTranslateView extends React.Component<TAutoTranslateViewProps, any> {
 	static navigationOptions = () => ({
 		title: I18n.t('Auto_Translate')
 	});
 
 	private mounted: boolean;
-	private rid: string | undefined;
-	private roomObservable: any;
-	private subscription: any;
+	private rid: string;
+	private roomObservable?: Observable<ISubscription>;
+	private subscription?: Subscription;
 
-	constructor(props: IAutoTranslateViewProps) {
+	constructor(props: TAutoTranslateViewProps) {
 		super(props);
 		this.mounted = false;
-		this.rid = props.route.params?.rid;
+		this.rid = props.route.params?.rid ?? '';
 		const room = props.route.params?.room;
 
 		if (room && room.observe) {
 			this.roomObservable = room.observe();
-			this.subscription = this.roomObservable.subscribe((changes: IRoom) => {
+			this.subscription = this.roomObservable.subscribe((changes: ISubscription) => {
 				if (this.mounted) {
 					const { selectedLanguage, enableAutoTranslate } = this.state;
 					if (selectedLanguage !== changes.autoTranslateLanguage) {
@@ -64,7 +61,7 @@ class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
 	async componentDidMount() {
 		this.mounted = true;
 		try {
-			const languages = await RocketChat.getSupportedLanguagesAutoTranslate();
+			const languages = await Services.getSupportedLanguagesAutoTranslate();
 			this.setState({ languages });
 		} catch (error) {
 			console.log(error);
@@ -81,7 +78,7 @@ class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
 		logEvent(events.AT_TOGGLE_TRANSLATE);
 		const { enableAutoTranslate } = this.state;
 		try {
-			await RocketChat.saveAutoTranslate({
+			await Services.saveAutoTranslate({
 				rid: this.rid,
 				field: 'autoTranslate',
 				value: enableAutoTranslate ? '0' : '1',
@@ -97,12 +94,10 @@ class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
 	saveAutoTranslateLanguage = async (language: string) => {
 		logEvent(events.AT_SET_LANG);
 		try {
-			// TODO: remove the parameter options, after migrate the RocketChat
-			await RocketChat.saveAutoTranslate({
+			await Services.saveAutoTranslate({
 				rid: this.rid,
 				field: 'autoTranslateLanguage',
-				value: language,
-				options: null
+				value: language
 			});
 			this.setState({ selectedLanguage: language });
 		} catch (error) {
@@ -113,7 +108,7 @@ class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
 
 	renderIcon = () => {
 		const { theme } = this.props;
-		return <List.Icon name='check' style={{ color: themes[theme].tintColor }} />;
+		return <List.Icon name='check' color={themes[theme].tintColor} />;
 	};
 
 	renderSwitch = () => {
@@ -131,7 +126,7 @@ class AutoTranslateView extends React.Component<IAutoTranslateViewProps, any> {
 				title={name || language}
 				onPress={() => this.saveAutoTranslateLanguage(language)}
 				testID={`auto-translate-view-${language}`}
-				right={isSelected ? this.renderIcon : null}
+				right={() => (isSelected ? this.renderIcon() : null)}
 				translateTitle={false}
 			/>
 		);

@@ -5,18 +5,21 @@ import { connect } from 'react-redux';
 import { RadioButton } from 'react-native-ui-lib';
 import { RouteProp } from '@react-navigation/native';
 
-import log from '../utils/log';
+import { ChatsStackParamList } from '../stacks/types';
+import log from '../lib/methods/helpers/log';
 import * as List from '../containers/List';
 import I18n from '../i18n';
 import * as HeaderButton from '../containers/HeaderButton';
 import StatusBar from '../containers/StatusBar';
-import { themes } from '../constants/colors';
-import { withTheme } from '../theme';
+import { themes } from '../lib/constants';
+import { TSupportedThemes, withTheme } from '../theme';
 import SafeAreaView from '../containers/SafeAreaView';
-import { animateNextTransition } from '../utils/layoutAnimation';
+import { animateNextTransition } from '../lib/methods/helpers/layoutAnimation';
 import { ICON_SIZE } from '../containers/List/constants';
 import SearchBox from '../containers/SearchBox';
 import sharedStyles from './Styles';
+import { IApplicationState } from '../definitions';
+import { TDataSelect } from '../definitions/IDataSelect';
 
 const styles = StyleSheet.create({
 	buttonText: {
@@ -26,39 +29,17 @@ const styles = StyleSheet.create({
 	}
 });
 
-interface IData {
-	rid: string;
-	name: string;
-	t?: string;
-	teamMain?: boolean;
-	alert?: boolean;
-}
-
 interface ISelectListViewState {
-	data: IData[];
-	dataFiltered: IData[];
+	data?: TDataSelect[];
+	dataFiltered?: TDataSelect[];
 	isSearching: boolean;
 	selected: string[];
 }
 
 interface ISelectListViewProps {
-	navigation: StackNavigationProp<any, 'SelectListView'>;
-	route: RouteProp<
-		{
-			SelectView: {
-				data: IData[];
-				title: string;
-				infoText: string;
-				nextAction(selected: string[]): void;
-				showAlert(): void;
-				isSearch: boolean;
-				onSearch(text: string): IData[];
-				isRadio: boolean;
-			};
-		},
-		'SelectView'
-	>;
-	theme: string;
+	navigation: StackNavigationProp<ChatsStackParamList, 'SelectListView'>;
+	route: RouteProp<ChatsStackParamList, 'SelectListView'>;
+	theme: TSupportedThemes;
 	isMasterDetail: boolean;
 }
 
@@ -73,18 +54,18 @@ class SelectListView extends React.Component<ISelectListViewProps, ISelectListVi
 
 	private isSearch: boolean;
 
-	private onSearch: (text: string) => IData[];
+	private onSearch?: (text: string) => Promise<TDataSelect[] | any>;
 
-	private isRadio: boolean;
+	private isRadio?: boolean;
 
 	constructor(props: ISelectListViewProps) {
 		super(props);
 		const data = props.route?.params?.data;
 		this.title = props.route?.params?.title;
-		this.infoText = props.route?.params?.infoText;
+		this.infoText = props.route?.params?.infoText ?? '';
 		this.nextAction = props.route?.params?.nextAction;
-		this.showAlert = props.route?.params?.showAlert;
-		this.isSearch = props.route?.params?.isSearch;
+		this.showAlert = props.route?.params?.showAlert ?? (() => {});
+		this.isSearch = props.route?.params?.isSearch ?? false;
 		this.onSearch = props.route?.params?.onSearch;
 		this.isRadio = props.route?.params?.isRadio;
 		this.state = {
@@ -126,23 +107,12 @@ class SelectListView extends React.Component<ISelectListViewProps, ISelectListVi
 		);
 	};
 
-	renderSearch = () => {
-		const { theme } = this.props;
-		return (
-			<View style={{ backgroundColor: themes[theme].auxiliaryBackground }}>
-				<SearchBox
-					onChangeText={(text: string) => this.search(text)}
-					testID='select-list-view-search'
-					onCancelPress={() => this.setState({ isSearching: false })}
-				/>
-			</View>
-		);
-	};
+	renderSearch = () => <SearchBox onChangeText={(text: string) => this.search(text)} testID='select-list-view-search' />;
 
 	search = async (text: string) => {
 		try {
 			this.setState({ isSearching: true });
-			const result = await this.onSearch(text);
+			const result = await this.onSearch?.(text);
 			this.setState({ dataFiltered: result });
 		} catch (e) {
 			log(e);
@@ -170,14 +140,14 @@ class SelectListView extends React.Component<ISelectListViewProps, ISelectListVi
 		}
 	};
 
-	renderItem = ({ item }: { item: IData }) => {
+	renderItem = ({ item }: { item: TDataSelect }) => {
 		const { theme } = this.props;
 		const { selected } = this.state;
 
 		const channelIcon = item.t === 'p' ? 'channel-private' : 'channel-public';
 		const teamIcon = item.t === 'p' ? 'teams-private' : 'teams';
 		const icon = item.teamMain ? teamIcon : channelIcon;
-		const checked = this.isChecked(item.rid) ? 'check' : null;
+		const checked = this.isChecked(item.rid) ? 'check' : '';
 
 		const showRadio = () => (
 			<RadioButton
@@ -187,13 +157,14 @@ class SelectListView extends React.Component<ISelectListViewProps, ISelectListVi
 				size={ICON_SIZE}
 			/>
 		);
-		const showCheck = () => (
-			<List.Icon
-				testID={checked ? `${item.name}-checked` : `${item.name}-unchecked`}
-				name={checked}
-				color={themes[theme].actionTintColor}
-			/>
-		);
+		const showCheck = () =>
+			checked !== '' ? (
+				<List.Icon
+					testID={checked ? `${item.name}-checked` : `${item.name}-unchecked`}
+					name={checked}
+					color={themes[theme].actionTintColor}
+				/>
+			) : null;
 
 		return (
 			<>
@@ -231,7 +202,7 @@ class SelectListView extends React.Component<ISelectListViewProps, ISelectListVi
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	isMasterDetail: state.app.isMasterDetail
 });
 

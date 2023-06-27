@@ -1,54 +1,56 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
-import { Alert, Clipboard, Share } from 'react-native';
+import { Alert, Share } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { connect } from 'react-redux';
 import moment from 'moment';
 
-import RocketChat from '../../lib/rocketchat';
 import database from '../../lib/database';
 import I18n from '../../i18n';
-import log, { logEvent } from '../../utils/log';
-import Navigation from '../../lib/Navigation';
+import log, { logEvent } from '../../lib/methods/helpers/log';
+import Navigation from '../../lib/navigation/appNavigation';
 import { getMessageTranslation } from '../message/utils';
 import { LISTENER } from '../Toast';
-import EventEmitter from '../../utils/events';
-import { showConfirmationAlert } from '../../utils/info';
-import { useActionSheet } from '../ActionSheet';
-import Header, { HEADER_HEIGHT } from './Header';
-import events from '../../utils/log/events';
+import EventEmitter from '../../lib/methods/helpers/events';
+import { showConfirmationAlert } from '../../lib/methods/helpers/info';
+import { TActionSheetOptionsItem, useActionSheet, ACTION_SHEET_ANIMATION_DURATION } from '../ActionSheet';
+import Header, { HEADER_HEIGHT, IHeader } from './Header';
+import events from '../../lib/methods/helpers/log/events';
+import { IApplicationState, IEmoji, ILoggedUser, TAnyMessageModel, TSubscriptionModel } from '../../definitions';
+import { getPermalinkMessage } from '../../lib/methods';
+import { getRoomTitle, getUidDirectMessage, hasPermission } from '../../lib/methods/helpers';
+import { Services } from '../../lib/services';
 
-interface IMessageActions {
-	room: {
-		rid: string | number;
-		autoTranslateLanguage: any;
-		autoTranslate: any;
-		reactWhenReadOnly: any;
-	};
-	tmid: string;
-	user: {
-		id: string | number;
-	};
-	editInit: Function;
-	reactionInit: Function;
-	onReactionPress: Function;
-	replyInit: Function;
+export interface IMessageActionsProps {
+	room: TSubscriptionModel;
+	tmid?: string;
+	user: Pick<ILoggedUser, 'id'>;
+	editInit: (message: TAnyMessageModel) => void;
+	reactionInit: (message: TAnyMessageModel) => void;
+	onReactionPress: (shortname: IEmoji, messageId: string) => void;
+	replyInit: (message: TAnyMessageModel, mention: boolean) => void;
 	isMasterDetail: boolean;
 	isReadOnly: boolean;
-	Message_AllowDeleting: boolean;
-	Message_AllowDeleting_BlockDeleteInMinutes: number;
-	Message_AllowEditing: boolean;
-	Message_AllowEditing_BlockEditInMinutes: number;
-	Message_AllowPinning: boolean;
-	Message_AllowStarring: boolean;
-	Message_Read_Receipt_Store_Users: boolean;
-	server: string;
-	editMessagePermission: [];
-	deleteMessagePermission: [];
-	forceDeleteMessagePermission: [];
-	pinMessagePermission: [];
+	Message_AllowDeleting?: boolean;
+	Message_AllowDeleting_BlockDeleteInMinutes?: number;
+	Message_AllowEditing?: boolean;
+	Message_AllowEditing_BlockEditInMinutes?: number;
+	Message_AllowPinning?: boolean;
+	Message_AllowStarring?: boolean;
+	Message_Read_Receipt_Store_Users?: boolean;
+	editMessagePermission?: string[];
+	deleteMessagePermission?: string[];
+	forceDeleteMessagePermission?: string[];
+	deleteOwnMessagePermission?: string[];
+	pinMessagePermission?: string[];
+	createDirectMessagePermission?: string[];
+}
+
+export interface IMessageActions {
+	showMessageActions: (message: TAnyMessageModel) => Promise<void>;
 }
 
 const MessageActions = React.memo(
-	forwardRef(
+	forwardRef<IMessageActions, IMessageActionsProps>(
 		(
 			{
 				room,
@@ -59,7 +61,6 @@ const MessageActions = React.memo(
 				onReactionPress,
 				replyInit,
 				isReadOnly,
-				server,
 				Message_AllowDeleting,
 				Message_AllowDeleting_BlockDeleteInMinutes,
 				Message_AllowEditing,
@@ -71,31 +72,46 @@ const MessageActions = React.memo(
 				editMessagePermission,
 				deleteMessagePermission,
 				forceDeleteMessagePermission,
-				pinMessagePermission
-			}: IMessageActions,
+				deleteOwnMessagePermission,
+				pinMessagePermission,
+				createDirectMessagePermission
+			},
 			ref
-		): any => {
-			let permissions: any = {};
-			const { showActionSheet, hideActionSheet }: any = useActionSheet();
+		) => {
+			let permissions = {
+				hasEditPermission: false,
+				hasDeletePermission: false,
+				hasForceDeletePermission: false,
+				hasPinPermission: false,
+				hasDeleteOwnPermission: false
+			};
+			const { showActionSheet, hideActionSheet } = useActionSheet();
 
 			const getPermissions = async () => {
 				try {
-					const permission = [editMessagePermission, deleteMessagePermission, forceDeleteMessagePermission, pinMessagePermission];
-					const result = await RocketChat.hasPermission(permission, room.rid);
+					const permission = [
+						editMessagePermission,
+						deleteMessagePermission,
+						forceDeleteMessagePermission,
+						pinMessagePermission,
+						deleteOwnMessagePermission
+					];
+					const result = await hasPermission(permission, room.rid);
 					permissions = {
 						hasEditPermission: result[0],
 						hasDeletePermission: result[1],
 						hasForceDeletePermission: result[2],
-						hasPinPermission: result[3]
+						hasPinPermission: result[3],
+						hasDeleteOwnPermission: result[4]
 					};
 				} catch {
 					// Do nothing
 				}
 			};
 
-			const isOwn = (message: any) => message.u && message.u._id === user.id;
+			const isOwn = (message: TAnyMessageModel) => message.u && message.u._id === user.id;
 
-			const allowEdit = (message: any) => {
+			const allowEdit = (message: TAnyMessageModel) => {
 				if (isReadOnly) {
 					return false;
 				}
@@ -110,7 +126,7 @@ const MessageActions = React.memo(
 					if (message.ts != null) {
 						msgTs = moment(message.ts);
 					}
-					let currentTsDiff: any;
+					let currentTsDiff = 0;
 					if (msgTs != null) {
 						currentTsDiff = moment().diff(msgTs, 'minutes');
 					}
@@ -119,7 +135,7 @@ const MessageActions = React.memo(
 				return true;
 			};
 
-			const allowDelete = (message: any) => {
+			const allowDelete = (message: TAnyMessageModel) => {
 				if (isReadOnly) {
 					return false;
 				}
@@ -128,7 +144,7 @@ const MessageActions = React.memo(
 				if (tmid === message.id) {
 					return false;
 				}
-				const deleteOwn = isOwn(message);
+				const deleteOwn = isOwn(message) && permissions.hasDeleteOwnPermission;
 				if (!(permissions.hasDeletePermission || (Message_AllowDeleting && deleteOwn) || permissions.hasForceDeletePermission)) {
 					return false;
 				}
@@ -141,7 +157,7 @@ const MessageActions = React.memo(
 					if (message.ts != null) {
 						msgTs = moment(message.ts);
 					}
-					let currentTsDiff: any;
+					let currentTsDiff = 0;
 					if (msgTs != null) {
 						currentTsDiff = moment().diff(msgTs, 'minutes');
 					}
@@ -150,19 +166,19 @@ const MessageActions = React.memo(
 				return true;
 			};
 
-			const getPermalink = (message: any) => RocketChat.getPermalinkMessage(message);
+			const getPermalink = (message: TAnyMessageModel) => getPermalinkMessage(message);
 
-			const handleReply = (message: any) => {
+			const handleReply = (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_REPLY);
 				replyInit(message, true);
 			};
 
-			const handleEdit = (message: any) => {
+			const handleEdit = (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_EDIT);
 				editInit(message);
 			};
 
-			const handleCreateDiscussion = (message: any) => {
+			const handleCreateDiscussion = (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_DISCUSSION);
 				const params = { message, channel: room, showCloseModal: true };
 				if (isMasterDetail) {
@@ -172,19 +188,19 @@ const MessageActions = React.memo(
 				}
 			};
 
-			const handleUnread = async (message: any) => {
+			const handleUnread = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_UNREAD);
 				const { id: messageId, ts } = message;
 				const { rid } = room;
 				try {
 					const db = database.active;
-					const result = await RocketChat.markAsUnread({ messageId });
+					const result = await Services.markAsUnread({ messageId });
 					if (result.success) {
 						const subCollection = db.get('subscriptions');
 						const subRecord = await subCollection.find(rid);
-						await db.action(async () => {
+						await db.write(async () => {
 							try {
-								await subRecord.update((sub: any) => (sub.lastOpen = ts));
+								await subRecord.update(sub => (sub.lastOpen = ts as Date)); // TODO: reevaluate IMessage
 							} catch {
 								// do nothing
 							}
@@ -197,42 +213,61 @@ const MessageActions = React.memo(
 				}
 			};
 
-			const handlePermalink = async (message: any) => {
+			const handlePermalink = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_PERMALINK);
 				try {
-					const permalink: any = await getPermalink(message);
-					Clipboard.setString(permalink);
+					const permalink = await getPermalink(message);
+					Clipboard.setString(permalink ?? '');
 					EventEmitter.emit(LISTENER, { message: I18n.t('Permalink_copied_to_clipboard') });
 				} catch {
 					logEvent(events.ROOM_MSG_ACTION_PERMALINK_F);
 				}
 			};
 
-			const handleCopy = async (message: any) => {
+			const handleCopy = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_COPY);
-				await Clipboard.setString(message?.attachments?.[0]?.description || message.msg);
+				await Clipboard.setString((message?.attachments?.[0]?.description || message.msg) ?? '');
 				EventEmitter.emit(LISTENER, { message: I18n.t('Copied_to_clipboard') });
 			};
 
-			const handleShare = async (message: any) => {
+			const handleShare = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_SHARE);
 				try {
-					const permalink: any = await getPermalink(message);
-					Share.share({ message: permalink });
+					const permalink = await getPermalink(message);
+					if (permalink) {
+						Share.share({ message: permalink });
+					}
 				} catch {
 					logEvent(events.ROOM_MSG_ACTION_SHARE_F);
 				}
 			};
 
-			const handleQuote = (message: any) => {
+			const handleQuote = (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_QUOTE);
 				replyInit(message, false);
 			};
 
-			const handleStar = async (message: any) => {
+			const handleReplyInDM = async (message: TAnyMessageModel) => {
+				if (message?.u?.username) {
+					const result = await Services.createDirectMessage(message.u.username);
+					if (result.success) {
+						const { room } = result;
+						const params = {
+							rid: room.rid,
+							name: getRoomTitle(room),
+							t: room.t,
+							roomUserId: getUidDirectMessage(room),
+							replyInDM: message
+						};
+						Navigation.replace('RoomView', params);
+					}
+				}
+			};
+
+			const handleStar = async (message: TAnyMessageModel) => {
 				logEvent(message.starred ? events.ROOM_MSG_ACTION_UNSTAR : events.ROOM_MSG_ACTION_STAR);
 				try {
-					await RocketChat.toggleStarMessage(message.id, message.starred);
+					await Services.toggleStarMessage(message.id, message.starred as boolean); // TODO: reevaluate `message.starred` type on IMessage
 					EventEmitter.emit(LISTENER, { message: message.starred ? I18n.t('Message_unstarred') : I18n.t('Message_starred') });
 				} catch (e) {
 					logEvent(events.ROOM_MSG_ACTION_STAR_F);
@@ -240,28 +275,27 @@ const MessageActions = React.memo(
 				}
 			};
 
-			const handlePin = async (message: any) => {
+			const handlePin = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_PIN);
 				try {
-					await RocketChat.togglePinMessage(message.id, message.pinned);
+					await Services.togglePinMessage(message.id, message.pinned as boolean); // TODO: reevaluate `message.pinned` type on IMessage
 				} catch (e) {
 					logEvent(events.ROOM_MSG_ACTION_PIN_F);
 					log(e);
 				}
 			};
 
-			const handleReaction = (shortname: any, message: any) => {
+			const handleReaction: IHeader['handleReaction'] = (emoji, message) => {
 				logEvent(events.ROOM_MSG_ACTION_REACTION);
-				if (shortname) {
-					onReactionPress(shortname, message.id);
+				if (emoji) {
+					onReactionPress(emoji, message.id);
 				} else {
-					reactionInit(message);
+					setTimeout(() => reactionInit(message), ACTION_SHEET_ANIMATION_DURATION);
 				}
-				// close actionSheet when click at header
 				hideActionSheet();
 			};
 
-			const handleReadReceipt = (message: any) => {
+			const handleReadReceipt = (message: TAnyMessageModel) => {
 				if (isMasterDetail) {
 					Navigation.navigate('ModalStackNavigator', { screen: 'ReadReceiptsView', params: { messageId: message.id } });
 				} else {
@@ -269,34 +303,31 @@ const MessageActions = React.memo(
 				}
 			};
 
-			const handleToggleTranslation = async (message: any) => {
+			const handleToggleTranslation = async (message: TAnyMessageModel) => {
 				try {
+					if (!room.autoTranslateLanguage) {
+						return;
+					}
 					const db = database.active;
-					await db.action(async () => {
-						await message.update((m: any) => {
+					await db.write(async () => {
+						await message.update(m => {
 							m.autoTranslate = !m.autoTranslate;
 							m._updatedAt = new Date();
 						});
 					});
 					const translatedMessage = getMessageTranslation(message, room.autoTranslateLanguage);
 					if (!translatedMessage) {
-						const m = {
-							_id: message.id,
-							rid: message.subscription.id,
-							u: message.u,
-							msg: message.msg
-						};
-						await RocketChat.translateMessage(m, room.autoTranslateLanguage);
+						await Services.translateMessage(message.id, room.autoTranslateLanguage);
 					}
 				} catch (e) {
 					log(e);
 				}
 			};
 
-			const handleReport = async (message: any) => {
+			const handleReport = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_MSG_ACTION_REPORT);
 				try {
-					await RocketChat.reportMessage(message.id);
+					await Services.reportMessage(message.id);
 					Alert.alert(I18n.t('Message_Reported'));
 				} catch (e) {
 					logEvent(events.ROOM_MSG_ACTION_REPORT_F);
@@ -304,16 +335,14 @@ const MessageActions = React.memo(
 				}
 			};
 
-			const handleDelete = (message: any) => {
-				// TODO - migrate this function for ts when fix the lint erros
-				// @ts-ignore
+			const handleDelete = (message: TAnyMessageModel) => {
 				showConfirmationAlert({
 					message: I18n.t('You_will_not_be_able_to_recover_this_message'),
 					confirmationText: I18n.t('Delete'),
 					onPress: async () => {
 						try {
 							logEvent(events.ROOM_MSG_ACTION_DELETE);
-							await RocketChat.deleteMessage(message.id, message.subscription.id);
+							await Services.deleteMessage(message.id, message.subscription ? message.subscription.id : '');
 						} catch (e) {
 							logEvent(events.ROOM_MSG_ACTION_DELETE_F);
 							log(e);
@@ -322,22 +351,12 @@ const MessageActions = React.memo(
 				});
 			};
 
-			const getOptions = (message: any) => {
-				let options: any = [];
-
-				// Reply
-				if (!isReadOnly) {
-					options = [
-						{
-							title: I18n.t('Reply_in_Thread'),
-							icon: 'threads',
-							onPress: () => handleReply(message)
-						}
-					];
-				}
+			const getOptions = (message: TAnyMessageModel) => {
+				const options: TActionSheetOptionsItem[] = [];
+				const videoConfBlock = message.t === 'videoconf';
 
 				// Quote
-				if (!isReadOnly) {
+				if (!isReadOnly && !videoConfBlock) {
 					options.push({
 						title: I18n.t('Quote'),
 						icon: 'quote',
@@ -345,21 +364,23 @@ const MessageActions = React.memo(
 					});
 				}
 
-				// Edit
-				if (allowEdit(message)) {
+				// Reply
+				if (!isReadOnly && !tmid) {
 					options.push({
-						title: I18n.t('Edit'),
-						icon: 'edit',
-						onPress: () => handleEdit(message)
+						title: I18n.t('Reply_in_Thread'),
+						icon: 'threads',
+						onPress: () => handleReply(message)
 					});
 				}
 
-				// Permalink
-				options.push({
-					title: I18n.t('Permalink'),
-					icon: 'link',
-					onPress: () => handlePermalink(message)
-				});
+				// Reply in DM
+				if (room.t !== 'd' && room.t !== 'l' && createDirectMessagePermission && !videoConfBlock) {
+					options.push({
+						title: I18n.t('Reply_in_direct_message'),
+						icon: 'arrow-back',
+						onPress: () => handleReplyInDM(message)
+					});
+				}
 
 				// Create Discussion
 				options.push({
@@ -368,21 +389,21 @@ const MessageActions = React.memo(
 					onPress: () => handleCreateDiscussion(message)
 				});
 
-				// Mark as unread
-				if (message.u && message.u._id !== user.id) {
-					options.push({
-						title: I18n.t('Mark_unread'),
-						icon: 'flag',
-						onPress: () => handleUnread(message)
-					});
-				}
+				// Permalink
+				options.push({
+					title: I18n.t('Get_link'),
+					icon: 'link',
+					onPress: () => handlePermalink(message)
+				});
 
 				// Copy
-				options.push({
-					title: I18n.t('Copy'),
-					icon: 'copy',
-					onPress: () => handleCopy(message)
-				});
+				if (!videoConfBlock) {
+					options.push({
+						title: I18n.t('Copy'),
+						icon: 'copy',
+						onPress: () => handleCopy(message)
+					});
+				}
 
 				// Share
 				options.push({
@@ -391,8 +412,26 @@ const MessageActions = React.memo(
 					onPress: () => handleShare(message)
 				});
 
+				// Edit
+				if (allowEdit(message) && !videoConfBlock) {
+					options.push({
+						title: I18n.t('Edit'),
+						icon: 'edit',
+						onPress: () => handleEdit(message)
+					});
+				}
+
+				// Pin
+				if (Message_AllowPinning && permissions?.hasPinPermission && !videoConfBlock) {
+					options.push({
+						title: I18n.t(message.pinned ? 'Unpin' : 'Pin'),
+						icon: 'pin',
+						onPress: () => handlePin(message)
+					});
+				}
+
 				// Star
-				if (Message_AllowStarring) {
+				if (Message_AllowStarring && !videoConfBlock) {
 					options.push({
 						title: I18n.t(message.starred ? 'Unstar' : 'Star'),
 						icon: message.starred ? 'star-filled' : 'star',
@@ -400,12 +439,12 @@ const MessageActions = React.memo(
 					});
 				}
 
-				// Pin
-				if (Message_AllowPinning && permissions?.hasPinPermission) {
+				// Mark as unread
+				if (message.u && message.u._id !== user.id) {
 					options.push({
-						title: I18n.t(message.pinned ? 'Unpin' : 'Pin'),
-						icon: 'pin',
-						onPress: () => handlePin(message)
+						title: I18n.t('Mark_unread'),
+						icon: 'flag',
+						onPress: () => handleUnread(message)
 					});
 				}
 
@@ -448,7 +487,7 @@ const MessageActions = React.memo(
 				return options;
 			};
 
-			const showMessageActions = async (message: any) => {
+			const showMessageActions = async (message: TAnyMessageModel) => {
 				logEvent(events.ROOM_SHOW_MSG_ACTIONS);
 				await getPermissions();
 				showActionSheet({
@@ -456,7 +495,7 @@ const MessageActions = React.memo(
 					headerHeight: HEADER_HEIGHT,
 					customHeader:
 						!isReadOnly || room.reactWhenReadOnly ? (
-							<Header server={server} handleReaction={handleReaction} isMasterDetail={isMasterDetail} message={message} />
+							<Header handleReaction={handleReaction} isMasterDetail={isMasterDetail} message={message} />
 						) : null
 				});
 			};
@@ -467,21 +506,22 @@ const MessageActions = React.memo(
 		}
 	)
 );
-
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	server: state.server.server,
-	Message_AllowDeleting: state.settings.Message_AllowDeleting,
-	Message_AllowDeleting_BlockDeleteInMinutes: state.settings.Message_AllowDeleting_BlockDeleteInMinutes,
-	Message_AllowEditing: state.settings.Message_AllowEditing,
-	Message_AllowEditing_BlockEditInMinutes: state.settings.Message_AllowEditing_BlockEditInMinutes,
-	Message_AllowPinning: state.settings.Message_AllowPinning,
-	Message_AllowStarring: state.settings.Message_AllowStarring,
-	Message_Read_Receipt_Store_Users: state.settings.Message_Read_Receipt_Store_Users,
+	Message_AllowDeleting: state.settings.Message_AllowDeleting as boolean,
+	Message_AllowDeleting_BlockDeleteInMinutes: state.settings.Message_AllowDeleting_BlockDeleteInMinutes as number,
+	Message_AllowEditing: state.settings.Message_AllowEditing as boolean,
+	Message_AllowEditing_BlockEditInMinutes: state.settings.Message_AllowEditing_BlockEditInMinutes as number,
+	Message_AllowPinning: state.settings.Message_AllowPinning as boolean,
+	Message_AllowStarring: state.settings.Message_AllowStarring as boolean,
+	Message_Read_Receipt_Store_Users: state.settings.Message_Read_Receipt_Store_Users as boolean,
 	isMasterDetail: state.app.isMasterDetail,
 	editMessagePermission: state.permissions['edit-message'],
 	deleteMessagePermission: state.permissions['delete-message'],
+	deleteOwnMessagePermission: state.permissions['delete-own-message'],
 	forceDeleteMessagePermission: state.permissions['force-delete-message'],
-	pinMessagePermission: state.permissions['pin-message']
+	pinMessagePermission: state.permissions['pin-message'],
+	createDirectMessagePermission: state.permissions['create-d']
 });
 
 export default connect(mapStateToProps, null, null, { forwardRef: true })(MessageActions);

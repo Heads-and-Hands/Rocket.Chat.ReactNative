@@ -3,7 +3,7 @@ import { createStackNavigator, StackNavigationOptions } from '@react-navigation/
 import { connect } from 'react-redux';
 
 import { ThemeContext } from '../theme';
-import { ModalAnimation, StackAnimation, defaultHeader, themedHeader } from '../utils/navigation';
+import { ModalAnimation, StackAnimation, defaultHeader, themedHeader } from '../lib/methods/helpers/navigation';
 // Outside Stack
 import NewServerView from '../views/NewServerView';
 import WorkspaceView from '../views/WorkspaceView';
@@ -25,10 +25,10 @@ const _OutsideStack = () => {
 			<Outside.Screen name='NewServerView' component={NewServerView} options={NewServerView.navigationOptions} />
 			<Outside.Screen name='WorkspaceView' component={WorkspaceView} options={WorkspaceView.navigationOptions} />
 			<Outside.Screen name='LoginView' component={LoginView} options={LoginView.navigationOptions} />
-			<Outside.Screen name='ForgotPasswordView' component={ForgotPasswordView} options={ForgotPasswordView.navigationOptions} />
+			<Outside.Screen name='ForgotPasswordView' component={ForgotPasswordView} />
 			<Outside.Screen name='SendEmailConfirmationView' component={SendEmailConfirmationView} />
 			<Outside.Screen name='RegisterView' component={RegisterView} options={RegisterView.navigationOptions} />
-			<Outside.Screen name='LegalView' component={LegalView} options={LegalView.navigationOptions} />
+			<Outside.Screen name='LegalView' component={LegalView} />
 		</Outside.Navigator>
 	);
 };
@@ -45,7 +45,9 @@ const OutsideStackModal = () => {
 	const { theme } = React.useContext(ThemeContext);
 
 	return (
-		<OutsideModal.Navigator mode='modal' screenOptions={{ ...defaultHeader, ...themedHeader(theme), ...ModalAnimation }}>
+		<OutsideModal.Navigator
+			screenOptions={{ ...defaultHeader, ...themedHeader(theme), ...ModalAnimation, presentation: 'transparentModal' }}
+		>
 			<OutsideModal.Screen name='OutsideStack' component={OutsideStack} options={{ headerShown: false }} />
 			<OutsideModal.Screen
 				name='AuthenticationWebView'

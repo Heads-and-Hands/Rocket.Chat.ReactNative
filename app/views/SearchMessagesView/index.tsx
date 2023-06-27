@@ -6,47 +6,54 @@ import { Q } from '@nozbe/watermelondb';
 import { connect } from 'react-redux';
 import { dequal } from 'dequal';
 
-import { IRoom, RoomType } from '../../definitions/IRoom';
-import { IAttachment } from '../../definitions/IAttachment';
-import RCTextInput from '../../containers/TextInput';
+import { FormTextInput } from '../../containers/TextInput';
 import ActivityIndicator from '../../containers/ActivityIndicator';
 import Markdown from '../../containers/markdown';
-import debounce from '../../utils/debounce';
-import RocketChat from '../../lib/rocketchat';
 import Message from '../../containers/message';
-import scrollPersistTaps from '../../utils/scrollPersistTaps';
-import { IMessage } from '../../containers/message/interfaces';
+import scrollPersistTaps from '../../lib/methods/helpers/scrollPersistTaps';
 import I18n from '../../i18n';
 import StatusBar from '../../containers/StatusBar';
-import log from '../../utils/log';
-import { themes } from '../../constants/colors';
-import { withTheme } from '../../theme';
+import log from '../../lib/methods/helpers/log';
+import { themes } from '../../lib/constants';
+import { TSupportedThemes, withTheme } from '../../theme';
 import { getUserSelector } from '../../selectors/login';
 import SafeAreaView from '../../containers/SafeAreaView';
 import * as HeaderButton from '../../containers/HeaderButton';
 import database from '../../lib/database';
 import { sanitizeLikeString } from '../../lib/database/utils';
 import getThreadName from '../../lib/methods/getThreadName';
-import getRoomInfo from '../../lib/methods/getRoomInfo';
-import { isIOS } from '../../utils/deviceInfo';
-import { compareServerVersion, methods } from '../../lib/utils';
+import getRoomInfo, { IRoomInfoResult } from '../../lib/methods/getRoomInfo';
 import styles from './styles';
 import { InsideStackParamList, ChatsStackParamList } from '../../stacks/types';
+import { compareServerVersion, debounce, isIOS } from '../../lib/methods/helpers';
+import {
+	IMessageFromServer,
+	IUser,
+	TMessageModel,
+	IUrl,
+	IAttachment,
+	ISubscription,
+	SubscriptionType,
+	TSubscriptionModel,
+	TGetCustomEmoji,
+	ICustomEmoji
+} from '../../definitions';
+import { Services } from '../../lib/services';
 
 const QUERY_SIZE = 50;
 
 interface ISearchMessagesViewState {
 	loading: boolean;
-	messages: IMessage[];
+	messages: (IMessageFromServer | TMessageModel)[];
 	searchText: string;
 }
 
-interface IRoomInfoParam {
-	room: IRoom;
-	member: any;
+export interface IRoomInfoParam {
+	room?: ISubscription;
+	member?: any;
 	rid: string;
-	t: RoomType;
-	joined: boolean;
+	t: SubscriptionType;
+	joined?: boolean;
 }
 
 interface INavigationOption {
@@ -58,16 +65,13 @@ interface INavigationOption {
 }
 
 interface ISearchMessagesViewProps extends INavigationOption {
-	user: { id: string };
+	user: IUser;
 	baseUrl: string;
 	serverVersion: string;
 	customEmojis: {
-		[key: string]: {
-			name: string;
-			extension: string;
-		};
+		[key: string]: ICustomEmoji;
 	};
-	theme: string;
+	theme: TSupportedThemes;
 	useRealName: boolean;
 }
 class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISearchMessagesViewState> {
@@ -75,11 +79,11 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 
 	private rid: string;
 
-	private t: string | undefined;
+	private t: SubscriptionType;
 
 	private encrypted: boolean | undefined;
 
-	private room: { rid: any; name: any; fname: any; t: any } | null | undefined;
+	private room?: IRoomInfoResult;
 
 	static navigationOptions = ({ navigation, route }: INavigationOption) => {
 		const options: StackNavigationOptions = {
@@ -106,7 +110,7 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 	}
 
 	async componentDidMount() {
-		this.room = await getRoomInfo(this.rid);
+		this.room = (await getRoomInfo(this.rid)) ?? undefined;
 	}
 
 	shouldComponentUpdate(nextProps: ISearchMessagesViewProps, nextState: ISearchMessagesViewState) {
@@ -132,7 +136,7 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 	}
 
 	// Handle encrypted rooms search messages
-	searchMessages = async (searchText: string) => {
+	searchMessages = async (searchText: string): Promise<(IMessageFromServer | TMessageModel)[]> => {
 		if (!searchText) {
 			return [];
 		}
@@ -151,12 +155,30 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 				.fetch();
 		}
 		// If it's not a encrypted room, search messages on the server
-		const result = await RocketChat.searchMessages(this.rid, searchText, QUERY_SIZE, this.offset);
+		const result = await Services.searchMessages(this.rid, searchText, QUERY_SIZE, this.offset);
 		if (result.success) {
-			return result.messages;
+			const urlRenderMessages = result.messages?.map(message => {
+				if (message.urls && message.urls.length > 0) {
+					message.urls = message.urls?.map((url, index) => {
+						if (url.meta) {
+							return {
+								_id: index,
+								title: url.meta.pageTitle,
+								description: url.meta.ogDescription,
+								image: url.meta.ogImage,
+								url: url.url
+							} as IUrl;
+						}
+						return {} as IUrl;
+					});
+				}
+				return message;
+			});
+			this.offset += QUERY_SIZE;
+			return urlRenderMessages;
 		}
+		return [];
 	};
-
 	getMessages = async (searchText: string, debounced?: boolean) => {
 		try {
 			const messages = await this.searchMessages(searchText);
@@ -180,7 +202,7 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 		await this.getMessages(searchText, true);
 	}, 1000);
 
-	getCustomEmoji = (name: string) => {
+	getCustomEmoji: TGetCustomEmoji = name => {
 		const { customEmojis } = this.props;
 		const emoji = customEmojis[name];
 		if (emoji) {
@@ -202,21 +224,28 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 		navigation.navigate('RoomInfoView', navParam);
 	};
 
-	jumpToMessage = async ({ item }: { item: IMessage }) => {
+	jumpToMessage = async ({ item }: { item: IMessageFromServer | TMessageModel }) => {
 		const { navigation } = this.props;
-		let params: any = {
+		let params: {
+			rid: string;
+			jumpToMessageId: string;
+			t: SubscriptionType;
+			room: TSubscriptionModel | undefined;
+			tmid?: string;
+			name?: string;
+		} = {
 			rid: this.rid,
 			jumpToMessageId: item._id,
 			t: this.t,
-			room: this.room
+			room: this.room as TSubscriptionModel
 		};
-		if (item.tmid) {
+		if ('tmid' in item && item.tmid) {
 			navigation.pop();
 			params = {
 				...params,
 				tmid: item.tmid,
-				name: await getThreadName(this.rid, item.tmid, item._id),
-				t: 'thread'
+				name: await getThreadName(this.rid, item.tmid as string, item._id),
+				t: SubscriptionType.THREAD
 			};
 			navigation.push('RoomView', params);
 		} else {
@@ -231,13 +260,11 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 			messages.length < this.offset ||
 			this.encrypted ||
 			loading ||
-			compareServerVersion(serverVersion, '3.17.0', methods.lowerThan)
+			compareServerVersion(serverVersion, 'lowerThan', '3.17.0')
 		) {
 			return;
 		}
 		this.setState({ loading: true });
-		this.offset += QUERY_SIZE;
-
 		await this.getMessages(searchText);
 	};
 
@@ -250,15 +277,15 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 		);
 	};
 
-	renderItem = ({ item }: { item: IMessage }) => {
+	renderItem = ({ item }: { item: IMessageFromServer | TMessageModel }) => {
+		const message = item as TMessageModel;
 		const { user, baseUrl, theme, useRealName } = this.props;
 		return (
 			<Message
-				item={item}
+				item={message}
 				baseUrl={baseUrl}
 				user={user}
 				timeFormat='MMM Do YYYY, h:mm:ss a'
-				isHeader
 				isThreadRoom
 				showAttachment={this.showAttachment}
 				getCustomEmoji={this.getCustomEmoji}
@@ -267,6 +294,7 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 				theme={theme}
 				onPress={() => this.jumpToMessage({ item })}
 				jumpToMessage={() => this.jumpToMessage({ item })}
+				rid={message.rid}
 			/>
 		);
 	};
@@ -286,7 +314,7 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 				style={[styles.list, { backgroundColor: themes[theme].backgroundColor }]}
 				keyExtractor={item => item._id}
 				onEndReached={this.onEndReached}
-				ListFooterComponent={loading ? <ActivityIndicator theme={theme} /> : null}
+				ListFooterComponent={loading ? <ActivityIndicator /> : null}
 				onEndReachedThreshold={0.5}
 				removeClippedSubviews={isIOS}
 				{...scrollPersistTaps}
@@ -300,16 +328,14 @@ class SearchMessagesView extends React.Component<ISearchMessagesViewProps, ISear
 			<SafeAreaView style={{ backgroundColor: themes[theme].backgroundColor }} testID='search-messages-view'>
 				<StatusBar />
 				<View style={styles.searchContainer}>
-					<RCTextInput
+					<FormTextInput
 						autoFocus
 						label={I18n.t('Search')}
 						onChangeText={this.search}
 						placeholder={I18n.t('Search_Messages')}
 						testID='search-message-view-input'
-						theme={theme}
 					/>
-					{/* @ts-ignore */}
-					<Markdown msg={I18n.t('You_can_search_using_RegExp_eg')} username='' baseUrl='' theme={theme} />
+					<Markdown msg={I18n.t('You_can_search_using_RegExp_eg')} theme={theme} />
 					<View style={[styles.divider, { backgroundColor: themes[theme].separatorColor }]} />
 				</View>
 				{this.renderList()}

@@ -1,22 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
-import { BLOCK_CONTEXT } from '@rocket.chat/ui-kit';
-import { Q } from '@nozbe/watermelondb';
+import { BlockContext } from '@rocket.chat/ui-kit';
 
-import debounce from '../../utils/debounce';
-import { avatarURL } from '../../utils/avatar';
-import RocketChat from '../../lib/rocketchat';
-import database from '../../lib/database';
+import { getAvatarURL } from '../../lib/methods/helpers/getAvatarUrl';
 import I18n from '../../i18n';
 import { MultiSelect } from '../../containers/UIKit/MultiSelect';
-import { themes } from '../../constants/colors';
 import styles from './styles';
 import { ICreateDiscussionViewSelectUsers } from './interfaces';
-
-interface IUser {
-	name: string;
-	username: string;
-}
+import { SubscriptionType, IUser } from '../../definitions';
+import { search } from '../../lib/methods';
+import { getRoomAvatar, getRoomTitle } from '../../lib/methods/helpers';
+import { useTheme } from '../../theme';
 
 const SelectUsers = ({
 	server,
@@ -25,49 +19,38 @@ const SelectUsers = ({
 	selected,
 	onUserSelect,
 	blockUnauthenticatedAccess,
-	serverVersion,
-	theme
-}: ICreateDiscussionViewSelectUsers): JSX.Element => {
+	serverVersion
+}: ICreateDiscussionViewSelectUsers): React.ReactElement => {
 	const [users, setUsers] = useState<any[]>([]);
+	const { colors } = useTheme();
 
-	const getUsers = debounce(async (keyword = '') => {
+	const getUsers = async (keyword = '') => {
 		try {
-			const db = database.active;
-			const usersCollection = db.get('users');
-			const res = await RocketChat.search({ text: keyword, filterRooms: false });
-			let items = [
-				...users.filter((u: IUser) => selected.includes(u.name)),
-				...res.filter((r: IUser) => !users.find((u: IUser) => u.name === r.name))
-			];
-			const records = await usersCollection.query(Q.where('username', Q.oneOf(items.map(u => u.name)))).fetch();
-			items = items.map(item => {
-				const index = records.findIndex((r: IUser) => r.username === item.name);
-				if (index > -1) {
-					const record = records[index];
-					return {
-						uids: item.uids,
-						usernames: item.usernames,
-						prid: item.prid,
-						fname: item.fname,
-						name: item.name,
-						avatarETag: record.avatarETag
-					};
-				}
-				return item;
-			});
+			const res = await search({ text: keyword, filterRooms: false });
+			const selectedUsers = users.filter((u: IUser) => selected.includes(u.name));
+			const filteredUsers = res.filter(r => !selectedUsers.find((u: IUser) => u.name === r.name));
+			const items = [...selectedUsers, ...filteredUsers];
 			setUsers(items);
+			return items.map((user: IUser) => ({
+				value: user.name,
+				text: { text: getRoomTitle(user) },
+				imageUrl: getAvatar(user)
+			}));
 		} catch {
 			// do nothing
 		}
-	}, 300);
+	};
 
-	const getAvatar = (item: any) =>
-		// TODO: remove this ts-ignore when migrate the file: app/utils/avatar.js
-		// @ts-ignore
-		avatarURL({
-			text: RocketChat.getRoomAvatar(item),
-			type: 'd',
-			user: { id: userId, token },
+	useEffect(() => {
+		getUsers('');
+	}, []);
+
+	const getAvatar = (item: IUser) =>
+		getAvatarURL({
+			text: getRoomAvatar(item),
+			type: SubscriptionType.DIRECT,
+			userId,
+			token,
 			server,
 			avatarETag: item.avatarETag,
 			blockUnauthenticatedAccess,
@@ -76,20 +59,18 @@ const SelectUsers = ({
 
 	return (
 		<>
-			<Text style={[styles.label, { color: themes[theme].titleText }]}>{I18n.t('Invite_users')}</Text>
+			<Text style={[styles.label, { color: colors.titleText }]}>{I18n.t('Invite_users')}</Text>
 			<MultiSelect
-				theme={theme}
 				inputStyle={styles.inputStyle}
 				onSearch={getUsers}
 				onChange={onUserSelect}
 				options={users.map((user: IUser) => ({
 					value: user.name,
-					text: { text: RocketChat.getRoomTitle(user) },
+					text: { text: getRoomTitle(user) },
 					imageUrl: getAvatar(user)
 				}))}
-				onClose={() => setUsers(users.filter((u: IUser) => selected.includes(u.name)))}
 				placeholder={{ text: `${I18n.t('Select_Users')}...` }}
-				context={BLOCK_CONTEXT.FORM}
+				context={BlockContext.FORM}
 				multiselect
 			/>
 		</>

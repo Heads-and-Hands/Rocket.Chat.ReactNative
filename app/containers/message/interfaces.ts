@@ -1,159 +1,128 @@
 import { MarkdownAST } from '@rocket.chat/message-parser';
+import { StyleProp, TextStyle } from 'react-native';
+import { ImageStyle } from 'react-native-fast-image';
+
+import { IUserChannel } from '../markdown/interfaces';
+import { TGetCustomEmoji } from '../../definitions/IEmoji';
+import { IAttachment, IThread, IUrl, IUserMention, IUserMessage, MessageType, TAnyMessageModel } from '../../definitions';
+import { IRoomInfoParam } from '../../views/SearchMessagesView';
 
 export interface IMessageAttachments {
-	attachments: any;
-	timeFormat: string;
-	showAttachment: Function;
-	getCustomEmoji: Function;
-	theme: string;
-}
-
-export interface IMessageAttachedActions {
-	attachment: {
-		actions: [];
-		text: string;
-	};
-	theme: string;
+	attachments?: IAttachment[];
+	timeFormat?: string;
+	style?: StyleProp<TextStyle>[];
+	isReply?: boolean;
+	showAttachment?: (file: IAttachment) => void;
+	getCustomEmoji: TGetCustomEmoji;
+	id: string;
 }
 
 export interface IMessageAvatar {
 	isHeader: boolean;
-	avatar: string;
-	emoji: string;
-	author: {
-		username: string;
-		_id: string;
-	};
+	avatar?: string;
+	emoji?: string;
+	author?: IUserMessage;
 	small?: boolean;
-	navToRoomInfo: Function;
-	getCustomEmoji(): void;
-	theme: string;
+	navToRoomInfo: (navParam: IRoomInfoParam) => void;
+	getCustomEmoji: TGetCustomEmoji;
 }
 
 export interface IMessageBlocks {
-	blocks: any;
+	blocks: { appId?: string }[];
 	id: string;
 	rid: string;
-	blockAction: Function;
+	blockAction?: (params: { actionId: string; appId: string; value: string; blockId: string; rid: string; mid: string }) => void;
 }
 
 export interface IMessageBroadcast {
-	author: {
-		_id: string;
-	};
-	broadcast: boolean;
-	theme: string;
+	author?: IUserMessage;
+	broadcast?: boolean;
 }
 
 export interface IMessageCallButton {
-	theme: string;
-	callJitsi: Function;
+	handleEnterCall?: () => void;
 }
-
-export interface IUser {
-	_id: string;
-	username: string;
-	name: string;
-}
-
-export type UserMention = Pick<IUser, '_id' | 'username' | 'name'>;
 
 export interface IMessageContent {
 	_id: string;
 	isTemp: boolean;
-	isInfo: boolean;
-	tmid: string;
+	isInfo: string | boolean;
+	tmid?: string;
 	isThreadRoom: boolean;
-	msg: string;
-	md: MarkdownAST;
-	theme: string;
+	msg?: string;
+	md?: MarkdownAST;
 	isEdited: boolean;
 	isEncrypted: boolean;
-	getCustomEmoji: Function;
-	channels: {
-		name: string;
-		_id: number;
-	}[];
-	mentions: UserMention[];
-	navToRoomInfo: Function;
-	useRealName: boolean;
+	getCustomEmoji: TGetCustomEmoji;
+	channels?: IUserChannel[];
+	mentions?: IUserMention[];
+	navToRoomInfo: (navParam: IRoomInfoParam) => void;
+	useRealName?: boolean;
 	isIgnored: boolean;
-	type: string;
-}
-
-export interface IMessageDiscussion {
-	msg: string;
-	dcount: number;
-	dlm: string;
-	theme: string;
+	type: MessageType;
+	comment?: string;
+	hasError: boolean;
+	isHeader: boolean;
+	isTranslated: boolean;
 }
 
 export interface IMessageEmoji {
-	content: any;
-	baseUrl: string;
-	standardEmojiStyle: object;
-	customEmojiStyle: object;
-	getCustomEmoji: Function;
+	content: string;
+	standardEmojiStyle: { fontSize: number };
+	customEmojiStyle: StyleProp<ImageStyle>;
+	getCustomEmoji: TGetCustomEmoji;
 }
 
-export interface IMessageThread {
-	msg: string;
-	tcount: number;
-	theme: string;
-	tlm: string;
+export interface IMessageThread extends Pick<IThread, 'msg' | 'tcount' | 'tlm' | 'id'> {
 	isThreadRoom: boolean;
-	id: string;
 }
 
 export interface IMessageTouchable {
 	hasError: boolean;
-	isInfo: boolean;
+	isInfo: string | boolean;
 	isThreadReply: boolean;
 	isTemp: boolean;
-	archived: boolean;
-	highlighted: boolean;
-	theme: string;
-	ts?: any;
-	urls?: any;
+	archived?: boolean;
+	highlighted?: boolean;
+	ts?: string | Date;
+	urls?: IUrl[];
 	reactions?: any;
-	alias?: any;
-	role?: any;
-	drid?: any;
+	alias?: string;
+	role?: string;
+	drid?: string;
 }
 
-export interface IMessageRepliedThread {
-	tmid: string;
-	tmsg: string;
-	id: string;
+export interface IMessageRepliedThread extends Pick<IThread, 'tmid' | 'tmsg' | 'id'> {
 	isHeader: boolean;
-	theme: string;
-	fetchThreadName: Function;
+	fetchThreadName?: (tmid: string, id: string) => Promise<string | undefined>;
 	isEncrypted: boolean;
 }
 
 export interface IMessageInner
-	extends IMessageDiscussion,
-		IMessageContent,
+	extends IMessageContent,
 		IMessageCallButton,
 		IMessageBlocks,
 		IMessageThread,
 		IMessageAttachments,
 		IMessageBroadcast {
-	type: string;
+	type: MessageType;
 	blocks: [];
+	urls?: IUrl[];
 }
 
-export interface IMessage extends IMessageRepliedThread, IMessageInner {
+export interface IMessage extends IMessageRepliedThread, IMessageInner, IMessageAvatar {
 	isThreadReply: boolean;
 	isThreadSequential: boolean;
-	isInfo: boolean;
+	isInfo: string | boolean;
 	isTemp: boolean;
 	isHeader: boolean;
 	hasError: boolean;
 	style: any;
-	onLongPress: Function;
-	isReadReceiptEnabled: boolean;
-	unread: boolean;
-	theme: string;
+	// style: ViewStyle;
+	onLongPress?: (item: TAnyMessageModel) => void;
+	isReadReceiptEnabled?: boolean;
+	unread?: boolean;
 	isIgnored: boolean;
+	dcount: number | undefined;
+	dlm: string | Date | undefined;
 }

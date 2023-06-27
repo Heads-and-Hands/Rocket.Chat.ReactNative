@@ -3,25 +3,12 @@ import { sanitizedRaw } from '@nozbe/watermelondb/RawRecord';
 
 import { CREATE_CHANNEL, LOGIN } from '../actions/actionsTypes';
 import { createChannelFailure, createChannelSuccess } from '../actions/createChannel';
-import { showErrorAlert } from '../utils/info';
-import RocketChat from '../lib/rocketchat';
-import Navigation from '../lib/Navigation';
+import { showErrorAlert } from '../lib/methods/helpers/info';
 import database from '../lib/database';
 import I18n from '../i18n';
-import { events, logEvent } from '../utils/log';
-import { goRoom } from '../utils/goRoom';
-
-const createChannel = function createChannel(data) {
-	return RocketChat.createChannel(data);
-};
-
-const createGroupChat = function createGroupChat() {
-	return RocketChat.createGroupChat();
-};
-
-const createTeam = function createTeam(data) {
-	return RocketChat.createTeam(data);
-};
+import { events, logEvent } from '../lib/methods/helpers/log';
+import { goRoom } from '../lib/methods/helpers/goRoom';
+import { Services } from '../lib/services';
 
 const handleRequest = function* handleRequest({ data }) {
 	try {
@@ -39,7 +26,7 @@ const handleRequest = function* handleRequest({ data }) {
 				broadcast: `${broadcast}`,
 				encrypted: `${encrypted}`
 			});
-			const result = yield call(createTeam, data);
+			const result = yield Services.createTeam(data);
 			sub = {
 				rid: result?.team?.roomId,
 				...result.team,
@@ -47,7 +34,7 @@ const handleRequest = function* handleRequest({ data }) {
 			};
 		} else if (data.group) {
 			logEvent(events.SELECTED_USERS_CREATE_GROUP);
-			const result = yield call(createGroupChat);
+			const result = yield Services.createGroupChat();
 			if (result.success) {
 				sub = {
 					rid: result.room?._id,
@@ -62,7 +49,7 @@ const handleRequest = function* handleRequest({ data }) {
 				broadcast,
 				encrypted
 			});
-			const result = yield call(createChannel, data);
+			const result = yield Services.createChannel(data);
 			sub = {
 				rid: result?.channel?._id || result?.group?._id,
 				...result?.channel,
@@ -90,10 +77,7 @@ const handleRequest = function* handleRequest({ data }) {
 
 const handleSuccess = function* handleSuccess({ data }) {
 	const isMasterDetail = yield select(state => state.app.isMasterDetail);
-	if (isMasterDetail) {
-		Navigation.navigate('DrawerNavigator');
-	}
-	goRoom({ item: data, isMasterDetail });
+	goRoom({ item: data, isMasterDetail, popToRoot: true });
 };
 
 const handleFailure = function handleFailure({ err, isTeam }) {

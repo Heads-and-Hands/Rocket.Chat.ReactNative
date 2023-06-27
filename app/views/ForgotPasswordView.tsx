@@ -1,81 +1,58 @@
-import React from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { Text } from 'react-native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
+import { useForm } from 'react-hook-form';
+import * as yup from 'yup';
+import { yupResolver } from '@hookform/resolvers/yup';
 
-import TextInput from '../containers/TextInput';
 import Button from '../containers/Button';
-import { showErrorAlert } from '../utils/info';
-import isValidEmail from '../utils/isValidEmail';
-import I18n from '../i18n';
-import RocketChat from '../lib/rocketchat';
-import { withTheme } from '../theme';
-import { themes } from '../constants/colors';
 import FormContainer, { FormContainerInner } from '../containers/FormContainer';
-import { events, logEvent } from '../utils/log';
-import sharedStyles from './Styles';
+import { ControlledFormTextInput } from '../containers/TextInput';
+import I18n from '../i18n';
+import { Services } from '../lib/services';
 import { OutsideParamList } from '../stacks/types';
+import { useTheme } from '../theme';
+import { showErrorAlert } from '../lib/methods/helpers';
+import { events, logEvent } from '../lib/methods/helpers/log';
+import sharedStyles from './Styles';
 
-interface IForgotPasswordViewState {
+const schema = yup.object().shape({
+	email: yup.string().email().required()
+});
+
+interface ISubmit {
 	email: string;
-	invalidEmail: boolean;
-	isFetching: boolean;
 }
 
-interface IForgotPasswordViewProps {
-	navigation: StackNavigationProp<OutsideParamList, 'ForgotPasswordView'>;
-	route: RouteProp<OutsideParamList, 'ForgotPasswordView'>;
-	theme: string;
-}
+const ForgotPasswordView = (): React.ReactElement => {
+	const {
+		control,
+		handleSubmit,
+		formState: { isValid }
+	} = useForm<ISubmit>({ mode: 'onChange', resolver: yupResolver(schema) });
 
-class ForgotPasswordView extends React.Component<IForgotPasswordViewProps, IForgotPasswordViewState> {
-	static navigationOptions = ({ route }: Pick<IForgotPasswordViewProps, 'route'>) => ({
-		title: route.params?.title ?? 'Rocket.Chat'
-	});
+	const [isFetching, setIsFetching] = useState(false);
 
-	state = {
-		email: '',
-		invalidEmail: true,
-		isFetching: false
-	};
+	const navigation = useNavigation<StackNavigationProp<OutsideParamList, 'ForgotPasswordView'>>();
+	const { params } = useRoute<RouteProp<OutsideParamList, 'ForgotPasswordView'>>();
+	const { colors } = useTheme();
 
-	shouldComponentUpdate(nextProps: IForgotPasswordViewProps, nextState: IForgotPasswordViewState) {
-		const { email, invalidEmail, isFetching } = this.state;
-		const { theme } = this.props;
-		if (nextProps.theme !== theme) {
-			return true;
-		}
-		if (nextState.email !== email) {
-			return true;
-		}
-		if (nextState.invalidEmail !== invalidEmail) {
-			return true;
-		}
-		if (nextState.isFetching !== isFetching) {
-			return true;
-		}
-		return false;
-	}
+	useLayoutEffect(() => {
+		navigation.setOptions({
+			title: params?.title ?? 'Rocket.Chat'
+		});
+	}, [navigation, params?.title]);
 
-	validate = (email: string) => {
-		if (!isValidEmail(email)) {
-			this.setState({ invalidEmail: true });
-			return;
-		}
-		this.setState({ email, invalidEmail: false });
-	};
-
-	resetPassword = async () => {
-		logEvent(events.FP_FORGOT_PASSWORD);
-		const { email, invalidEmail } = this.state;
-		if (invalidEmail || !email) {
+	const resetPassword = async ({ email }: ISubmit) => {
+		if (!isValid) {
 			return;
 		}
 		try {
-			this.setState({ isFetching: true });
-			const result = await RocketChat.forgotPassword(email);
+			logEvent(events.FP_FORGOT_PASSWORD);
+			setIsFetching(true);
+			const result = await Services.forgotPassword(email);
 			if (result.success) {
-				const { navigation } = this.props;
 				navigation.pop();
 				showErrorAlert(I18n.t('Forgot_password_If_this_email_is_registered'), I18n.t('Alert'));
 			}
@@ -84,43 +61,38 @@ class ForgotPasswordView extends React.Component<IForgotPasswordViewProps, IForg
 			const msg = (e.data && e.data.error) || I18n.t('There_was_an_error_while_action', { action: I18n.t('resetting_password') });
 			showErrorAlert(msg, I18n.t('Alert'));
 		}
-		this.setState({ isFetching: false });
+		setIsFetching(false);
 	};
 
-	render() {
-		const { invalidEmail, isFetching } = this.state;
-		const { theme } = this.props;
+	return (
+		<FormContainer testID='forgot-password-view'>
+			<FormContainerInner>
+				<Text style={[sharedStyles.loginTitle, sharedStyles.textBold, { color: colors.titleText }]}>
+					{I18n.t('Forgot_password')}
+				</Text>
+				<ControlledFormTextInput
+					name='email'
+					control={control}
+					autoFocus
+					placeholder={I18n.t('Email')}
+					keyboardType='email-address'
+					returnKeyType='send'
+					iconLeft='mail'
+					onSubmitEditing={handleSubmit(resetPassword)}
+					testID='forgot-password-view-email'
+					containerStyle={sharedStyles.inputLastChild}
+				/>
+				<Button
+					title={I18n.t('Reset_password')}
+					type='primary'
+					onPress={handleSubmit(resetPassword)}
+					testID='forgot-password-view-submit'
+					loading={isFetching}
+					disabled={!isValid}
+				/>
+			</FormContainerInner>
+		</FormContainer>
+	);
+};
 
-		return (
-			<FormContainer theme={theme} testID='forgot-password-view'>
-				<FormContainerInner>
-					<Text style={[sharedStyles.loginTitle, sharedStyles.textBold, { color: themes[theme].titleText }]}>
-						{I18n.t('Forgot_password')}
-					</Text>
-					<TextInput
-						autoFocus
-						placeholder={I18n.t('Email')}
-						keyboardType='email-address'
-						returnKeyType='send'
-						onChangeText={email => this.validate(email)}
-						onSubmitEditing={this.resetPassword}
-						testID='forgot-password-view-email'
-						containerStyle={sharedStyles.inputLastChild}
-						theme={theme}
-					/>
-					<Button
-						title={I18n.t('Reset_password')}
-						type='primary'
-						onPress={this.resetPassword}
-						testID='forgot-password-view-submit'
-						loading={isFetching}
-						disabled={invalidEmail}
-						theme={theme}
-					/>
-				</FormContainerInner>
-			</FormContainer>
-		);
-	}
-}
-
-export default withTheme(ForgotPasswordView);
+export default ForgotPasswordView;

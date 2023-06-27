@@ -1,19 +1,19 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import Touch from '../../utils/touch';
-import { themes } from '../../constants/colors';
-import { withTheme } from '../../theme';
+import Touch from '../../containers/Touch';
+import { themes } from '../../lib/constants';
+import { TSupportedThemes, withTheme } from '../../theme';
 import styles from './styles';
 
 interface SidebarItemProps {
 	left: JSX.Element;
-	right: JSX.Element;
+	right?: JSX.Element;
 	text: string;
-	current: boolean;
+	current?: boolean;
 	onPress(): void;
 	testID: string;
-	theme: string;
+	theme: TSupportedThemes;
 }
 
 const Item = React.memo(({ left, right, text, onPress, testID, current, theme }: SidebarItemProps) => (
@@ -21,8 +21,8 @@ const Item = React.memo(({ left, right, text, onPress, testID, current, theme }:
 		key={testID}
 		testID={testID}
 		onPress={onPress}
-		theme={theme}
-		style={[styles.item, current && { backgroundColor: themes[theme].borderColor }]}>
+		style={[styles.item, current && { backgroundColor: themes[theme].borderColor }]}
+	>
 		<View style={styles.itemHorizontal}>{left}</View>
 		<View style={styles.itemCenter}>
 			<Text style={[styles.itemText, { color: themes[theme].titleText }]} numberOfLines={1} accessibilityLabel={text}>

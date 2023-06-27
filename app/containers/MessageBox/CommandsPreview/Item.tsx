@@ -1,12 +1,13 @@
+import FastImage from 'react-native-fast-image';
 import React, { useContext, useState } from 'react';
 import { TouchableOpacity } from 'react-native';
-import FastImage from '@rocket.chat/react-native-fast-image';
 
-import styles from '../styles';
-import { CustomIcon } from '../../../lib/Icons';
-import { themes } from '../../../constants/colors';
-import MessageboxContext from '../Context';
+import { themes } from '../../../lib/constants';
+import { CustomIcon } from '../../CustomIcon';
+import { useTheme } from '../../../theme';
 import ActivityIndicator from '../../ActivityIndicator';
+import MessageboxContext from '../Context';
+import styles from '../styles';
 
 interface IMessageBoxCommandsPreviewItem {
 	item: {
@@ -14,27 +15,29 @@ interface IMessageBoxCommandsPreviewItem {
 		id: string;
 		value: string;
 	};
-	theme: string;
 }
 
-const Item = ({ item, theme }: IMessageBoxCommandsPreviewItem) => {
+const Item = ({ item }: IMessageBoxCommandsPreviewItem) => {
 	const context = useContext(MessageboxContext);
 	const { onPressCommandPreview } = context;
 	const [loading, setLoading] = useState(true);
+	const { theme } = useTheme();
 
 	return (
 		<TouchableOpacity
 			style={styles.commandPreview}
 			onPress={() => onPressCommandPreview(item)}
-			testID={`command-preview-item${item.id}`}>
+			testID={`command-preview-item${item.id}`}
+		>
 			{item.type === 'image' ? (
 				<FastImage
 					style={styles.commandPreviewImage}
 					source={{ uri: item.value }}
 					resizeMode={FastImage.resizeMode.cover}
 					onLoadStart={() => setLoading(true)}
-					onLoad={() => setLoading(false)}>
-					{loading ? <ActivityIndicator theme={theme} /> : null}
+					onLoad={() => setLoading(false)}
+				>
+					{loading ? <ActivityIndicator /> : null}
 				</FastImage>
 			) : (
 				<CustomIcon name='attach' size={36} color={themes[theme].actionTintColor} />

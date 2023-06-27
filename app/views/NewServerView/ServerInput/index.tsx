@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, TextInputProps, View } from 'react-native';
 
-import TextInput from '../../../containers/TextInput';
+import { FormTextInput } from '../../../containers/TextInput';
 import * as List from '../../../containers/List';
-import { themes } from '../../../constants/colors';
+import { themes } from '../../../lib/constants';
 import I18n from '../../../i18n';
+import { TServerHistoryModel } from '../../../definitions';
 import Item from './Item';
-import { IServer } from '../index';
+import { TSupportedThemes } from '../../../theme';
 
 const styles = StyleSheet.create({
 	container: {
@@ -23,18 +24,18 @@ const styles = StyleSheet.create({
 		zIndex: 1,
 		position: 'absolute',
 		borderWidth: StyleSheet.hairlineWidth,
-		borderRadius: 2,
+		borderRadius: 4,
 		borderTopWidth: 0
 	}
 });
 
 interface IServerInput extends TextInputProps {
 	text: string;
-	theme: string;
+	theme: TSupportedThemes;
 	serversHistory: any[];
 	onSubmit(): void;
-	onDelete(item: IServer): void;
-	onPressServerHistory(serverHistory: IServer): void;
+	onDelete(item: TServerHistoryModel): void;
+	onPressServerHistory(serverHistory: TServerHistoryModel): void;
 }
 
 const ServerInput = ({
@@ -49,7 +50,7 @@ const ServerInput = ({
 	const [focused, setFocused] = useState(false);
 	return (
 		<View style={styles.container}>
-			<TextInput
+			<FormTextInput
 				label={I18n.t('Enter_workspace_URL')}
 				placeholder={I18n.t('Workspace_URL_Example')}
 				containerStyle={styles.inputContainer}
@@ -61,7 +62,6 @@ const ServerInput = ({
 				clearButtonMode='while-editing'
 				keyboardType='url'
 				textContentType='URL'
-				theme={theme}
 				onFocus={() => setFocused(true)}
 				onBlur={() => setFocused(false)}
 			/>
@@ -70,7 +70,8 @@ const ServerInput = ({
 					style={[
 						styles.serverHistory,
 						{ backgroundColor: themes[theme].backgroundColor, borderColor: themes[theme].separatorColor }
-					]}>
+					]}
+				>
 					<FlatList
 						data={serversHistory}
 						renderItem={({ item }) => (

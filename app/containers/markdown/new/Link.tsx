@@ -1,14 +1,15 @@
 import React, { useContext } from 'react';
-import { Text, Clipboard } from 'react-native';
+import { Text } from 'react-native';
 import { Link as LinkProps } from '@rocket.chat/message-parser';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 import styles from '../styles';
 import I18n from '../../../i18n';
 import { LISTENER } from '../../Toast';
 import { useTheme } from '../../../theme';
-import openLink from '../../../utils/openLink';
-import EventEmitter from '../../../utils/events';
-import { themes } from '../../../constants/colors';
+import openLink from '../../../lib/methods/helpers/openLink';
+import EventEmitter from '../../../lib/methods/helpers/events';
+import { themes } from '../../../lib/constants';
 import Strike from './Strike';
 import Italic from './Italic';
 import Bold from './Bold';
@@ -18,7 +19,7 @@ interface ILinkProps {
 	value: LinkProps['value'];
 }
 
-const Link = ({ value }: ILinkProps): JSX.Element => {
+const Link = ({ value }: ILinkProps) => {
 	const { theme } = useTheme();
 	const { onLinkPress } = useContext(MarkdownContext);
 	const { src, label } = value;
@@ -38,20 +39,23 @@ const Link = ({ value }: ILinkProps): JSX.Element => {
 	};
 
 	return (
-		<Text onPress={handlePress} onLongPress={onLongPress} style={[styles.link, { color: themes[theme!].actionTintColor }]}>
+		<Text onPress={handlePress} onLongPress={onLongPress} style={[styles.link, { color: themes[theme].actionTintColor }]}>
 			{(block => {
-				switch (block.type) {
-					case 'PLAIN_TEXT':
-						return block.value;
-					case 'STRIKE':
-						return <Strike value={block.value} />;
-					case 'ITALIC':
-						return <Italic value={block.value} />;
-					case 'BOLD':
-						return <Bold value={block.value} />;
-					default:
-						return null;
-				}
+				const blockArray = Array.isArray(block) ? block : [block];
+				return blockArray.map(blockInArray => {
+					switch (blockInArray.type) {
+						case 'PLAIN_TEXT':
+							return blockInArray.value;
+						case 'STRIKE':
+							return <Strike value={blockInArray.value} />;
+						case 'ITALIC':
+							return <Italic value={blockInArray.value} />;
+						case 'BOLD':
+							return <Bold value={blockInArray.value} />;
+						default:
+							return null;
+					}
+				});
 			})(label)}
 		</Text>
 	);

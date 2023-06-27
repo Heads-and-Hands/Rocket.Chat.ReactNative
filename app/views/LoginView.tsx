@@ -1,21 +1,21 @@
-import React from 'react';
-import { Alert, Keyboard, StyleSheet, Text, View } from 'react-native';
-import { connect } from 'react-redux';
 import { dequal } from 'dequal';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/core';
+import React from 'react';
+import { Alert, Keyboard, StyleSheet, Text, View, TextInput as RNTextInput } from 'react-native';
+import { connect } from 'react-redux';
 
+import { loginRequest } from '../actions/login';
+import { themes } from '../lib/constants';
 import Button from '../containers/Button';
-import I18n from '../i18n';
-import * as HeaderButton from '../containers/HeaderButton';
-import { themes } from '../constants/colors';
-import { withTheme } from '../theme';
 import FormContainer, { FormContainerInner } from '../containers/FormContainer';
-import TextInput from '../containers/TextInput';
-import { loginRequest as loginRequestAction } from '../actions/login';
+import * as HeaderButton from '../containers/HeaderButton';
 import LoginServices from '../containers/LoginServices';
-import sharedStyles from './Styles';
+import { FormTextInput } from '../containers/TextInput';
+import { IApplicationState, IBaseScreen } from '../definitions';
+import I18n from '../i18n';
 import { OutsideParamList } from '../stacks/types';
+import { withTheme } from '../theme';
+import sharedStyles from './Styles';
+import UGCRules from '../containers/UserGeneratedContentRules';
 
 const styles = StyleSheet.create({
 	registerDisabled: {
@@ -32,8 +32,7 @@ const styles = StyleSheet.create({
 	},
 	bottomContainer: {
 		flexDirection: 'column',
-		alignItems: 'center',
-		marginBottom: 32
+		alignItems: 'center'
 	},
 	bottomContainerText: {
 		...sharedStyles.textRegular,
@@ -45,12 +44,13 @@ const styles = StyleSheet.create({
 	},
 	loginButton: {
 		marginTop: 16
+	},
+	ugcContainer: {
+		marginTop: 32
 	}
 });
 
-interface ILoginViewProps {
-	navigation: StackNavigationProp<OutsideParamList, 'LoginView'>;
-	route: RouteProp<OutsideParamList, 'LoginView'>;
+interface ILoginViewProps extends IBaseScreen<OutsideParamList, 'LoginView'> {
 	Site_Name: string;
 	Accounts_RegistrationForm: string;
 	Accounts_RegistrationForm_LinkReplacementText: string;
@@ -63,13 +63,17 @@ interface ILoginViewProps {
 		error: string;
 	};
 	failure: boolean;
-	theme: string;
 	loginRequest: Function;
 	inviteLinkToken: string;
 }
 
-class LoginView extends React.Component<ILoginViewProps, any> {
-	private passwordInput: any;
+interface ILoginViewState {
+	user: string;
+	password: string;
+}
+
+class LoginView extends React.Component<ILoginViewProps, ILoginViewState> {
+	private passwordInput: RNTextInput | null | undefined;
 
 	static navigationOptions = ({ route, navigation }: ILoginViewProps) => ({
 		title: route?.params?.title ?? 'Rocket.Chat',
@@ -132,9 +136,9 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 		}
 
 		const { user, password } = this.state;
-		const { loginRequest } = this.props;
+		const { dispatch } = this.props;
 		Keyboard.dismiss();
-		loginRequest({ user, password });
+		dispatch(loginRequest({ user, password }));
 	};
 
 	renderUserForm = () => {
@@ -156,7 +160,7 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 		return (
 			<>
 				<Text style={[styles.title, sharedStyles.textBold, { color: themes[theme].titleText }]}>{I18n.t('Login')}</Text>
-				<TextInput
+				<FormTextInput
 					label={I18n.t('Username_or_email')}
 					containerStyle={styles.inputContainer}
 					placeholder={Accounts_EmailOrUsernamePlaceholder || I18n.t('Username_or_email')}
@@ -164,15 +168,14 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 					returnKeyType='next'
 					onChangeText={(value: string) => this.setState({ user: value })}
 					onSubmitEditing={() => {
-						this.passwordInput.focus();
+						this.passwordInput?.focus();
 					}}
 					testID='login-view-email'
 					textContentType='username'
-					autoCompleteType='username'
-					theme={theme}
+					autoComplete='username'
 					value={user}
 				/>
-				<TextInput
+				<FormTextInput
 					label={I18n.t('Password')}
 					containerStyle={styles.inputContainer}
 					inputRef={e => {
@@ -185,8 +188,7 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 					onChangeText={(value: string) => this.setState({ password: value })}
 					testID='login-view-password'
 					textContentType='password'
-					autoCompleteType='password'
-					theme={theme}
+					autoComplete='password'
 				/>
 				<Button
 					title={I18n.t('Login')}
@@ -195,7 +197,6 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 					testID='login-view-submit'
 					loading={isFetching}
 					disabled={!this.valid()}
-					theme={theme}
 					style={styles.loginButton}
 				/>
 				{Accounts_PasswordReset && (
@@ -204,7 +205,6 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 						type='secondary'
 						onPress={this.forgotPassword}
 						testID='login-view-forgot-password'
-						theme={theme}
 						color={themes[theme].auxiliaryText}
 						fontSize={14}
 					/>
@@ -217,7 +217,8 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 						<Text
 							style={[styles.bottomContainerTextBold, { color: themes[theme].actionTintColor }]}
 							onPress={this.register}
-							testID='login-view-register'>
+							testID='login-view-register'
+						>
 							{I18n.t('Create_account')}
 						</Text>
 					</View>
@@ -226,16 +227,18 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 						{Accounts_RegistrationForm_LinkReplacementText}
 					</Text>
 				)}
+				<UGCRules styleContainer={styles.ugcContainer} />
 			</>
 		);
 	};
 
 	render() {
-		const { Accounts_ShowFormLogin, theme, navigation } = this.props;
+		const { Accounts_ShowFormLogin } = this.props;
+
 		return (
-			<FormContainer theme={theme} testID='login-view'>
+			<FormContainer testID='login-view'>
 				<FormContainerInner>
-					<LoginServices separator={Accounts_ShowFormLogin} navigation={navigation} />
+					<LoginServices separator={Accounts_ShowFormLogin} />
 					{this.renderUserForm()}
 				</FormContainerInner>
 			</FormContainer>
@@ -243,23 +246,19 @@ class LoginView extends React.Component<ILoginViewProps, any> {
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	server: state.server.server,
-	Site_Name: state.settings.Site_Name,
-	Accounts_ShowFormLogin: state.settings.Accounts_ShowFormLogin,
-	Accounts_RegistrationForm: state.settings.Accounts_RegistrationForm,
-	Accounts_RegistrationForm_LinkReplacementText: state.settings.Accounts_RegistrationForm_LinkReplacementText,
+	Site_Name: state.settings.Site_Name as string,
+	Accounts_ShowFormLogin: state.settings.Accounts_ShowFormLogin as boolean,
+	Accounts_RegistrationForm: state.settings.Accounts_RegistrationForm as string,
+	Accounts_RegistrationForm_LinkReplacementText: state.settings.Accounts_RegistrationForm_LinkReplacementText as string,
 	isFetching: state.login.isFetching,
 	failure: state.login.failure,
 	error: state.login.error && state.login.error.data,
-	Accounts_EmailOrUsernamePlaceholder: state.settings.Accounts_EmailOrUsernamePlaceholder,
-	Accounts_PasswordPlaceholder: state.settings.Accounts_PasswordPlaceholder,
-	Accounts_PasswordReset: state.settings.Accounts_PasswordReset,
+	Accounts_EmailOrUsernamePlaceholder: state.settings.Accounts_EmailOrUsernamePlaceholder as string,
+	Accounts_PasswordPlaceholder: state.settings.Accounts_PasswordPlaceholder as string,
+	Accounts_PasswordReset: state.settings.Accounts_PasswordReset as boolean,
 	inviteLinkToken: state.inviteLinks.token
 });
 
-const mapDispatchToProps = (dispatch: any) => ({
-	loginRequest: (params: any) => dispatch(loginRequestAction(params))
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(withTheme(LoginView));
+export default connect(mapStateToProps)(withTheme(LoginView));

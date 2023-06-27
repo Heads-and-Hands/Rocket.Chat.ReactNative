@@ -3,10 +3,10 @@ import { date, field, json, relation } from '@nozbe/watermelondb/decorators';
 
 import { sanitizer } from '../utils';
 
-export const TABLE_NAME = 'thread_messages';
+export const THREAD_MESSAGES_TABLE = 'thread_messages';
 
 export default class ThreadMessage extends Model {
-	static table = TABLE_NAME;
+	static table = THREAD_MESSAGES_TABLE;
 
 	static associations = {
 		subscriptions: { type: 'belongs_to', key: 'subscription_id' }
@@ -77,4 +77,42 @@ export default class ThreadMessage extends Model {
 	@field('draft_message') draftMessage;
 
 	@field('e2e') e2e;
+
+	asPlain() {
+		return {
+			id: this.id,
+			msg: this.msg,
+			t: this.t,
+			ts: this.ts,
+			u: this.u,
+			rid: this.rid,
+			alias: this.alias,
+			parseUrls: this.parseUrls,
+			groupable: this.groupable,
+			avatar: this.avatar,
+			emoji: this.emoji,
+			attachments: this.attachments,
+			urls: this.urls,
+			_updatedAt: this._updatedAt,
+			status: this.status,
+			pinned: this.pinned,
+			starred: this.starred,
+			editedBy: this.editedBy,
+			reactions: this.reactions,
+			role: this.role,
+			drid: this.drid,
+			dcount: this.dcount,
+			dlm: this.dlm,
+			tcount: this.tcount,
+			tlm: this.tlm,
+			replies: this.replies,
+			mentions: this.mentions,
+			channels: this.channels,
+			unread: this.unread,
+			autoTranslate: this.autoTranslate,
+			translations: this.translations,
+			draftMessage: this.draftMessage,
+			e2e: this.e2e
+		};
+	}
 }

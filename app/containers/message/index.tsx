@@ -1,112 +1,100 @@
 import React from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, ViewStyle } from 'react-native';
 
 import Message from './Message';
 import MessageContext from './Context';
-import debounce from '../../utils/debounce';
-import { SYSTEM_MESSAGES, getMessageTranslation } from './utils';
-import { E2E_MESSAGE_TYPE, E2E_STATUS } from '../../lib/encryption/constants';
-import messagesStatus from '../../constants/messagesStatus';
-import { withTheme } from '../../theme';
-import openLink from '../../utils/openLink';
+import { debounce } from '../../lib/methods/helpers';
+import { getMessageTranslation } from './utils';
+import { TSupportedThemes, withTheme } from '../../theme';
+import openLink from '../../lib/methods/helpers/openLink';
+import { IAttachment, TAnyMessageModel, TGetCustomEmoji } from '../../definitions';
+import { IRoomInfoParam } from '../../views/SearchMessagesView';
+import { E2E_MESSAGE_TYPE, E2E_STATUS, messagesStatus } from '../../lib/constants';
 
 interface IMessageContainerProps {
-	item: any;
+	item: TAnyMessageModel;
 	user: {
 		id: string;
 		username: string;
 		token: string;
 	};
+	msg?: string;
 	rid: string;
-	timeFormat: string;
-	style: any;
-	archived: boolean;
-	broadcast: boolean;
-	previousItem: {
-		ts: any;
-		u: any;
-		groupable: any;
-		id: any;
-		tmid: any;
-		status: any;
-	};
+	timeFormat?: string;
+	style?: ViewStyle;
+	archived?: boolean;
+	broadcast?: boolean;
+	previousItem?: TAnyMessageModel;
 	baseUrl: string;
-	Message_GroupingPeriod: number;
-	isReadReceiptEnabled: boolean;
+	Message_GroupingPeriod?: number;
+	isReadReceiptEnabled?: boolean;
 	isThreadRoom: boolean;
-	useRealName: boolean;
-	autoTranslateRoom: boolean;
-	autoTranslateLanguage: string;
-	status: number;
-	isIgnored: boolean;
-	highlighted: boolean;
-	getCustomEmoji(): void;
-	onLongPress: Function;
-	onReactionPress: Function;
-	onEncryptedPress: Function;
-	onDiscussionPress: Function;
-	onThreadPress: Function;
-	errorActionsShow: Function;
-	replyBroadcast: Function;
-	reactionInit: Function;
-	fetchThreadName: Function;
-	showAttachment: Function;
-	onReactionLongPress: Function;
-	navToRoomInfo: Function;
-	callJitsi: Function;
-	blockAction: Function;
-	onAnswerButtonPress: Function;
-	theme: string;
-	threadBadgeColor: string;
-	toggleFollowThread: Function;
-	jumpToMessage: Function;
-	onPress: Function;
+	isSystemMessage?: boolean;
+	useRealName?: boolean;
+	autoTranslateRoom?: boolean;
+	autoTranslateLanguage?: string;
+	status?: number;
+	isIgnored?: boolean;
+	highlighted?: boolean;
+	getCustomEmoji: TGetCustomEmoji;
+	onLongPress?: (item: TAnyMessageModel) => void;
+	onReactionPress?: (emoji: string, id: string) => void;
+	onEncryptedPress?: () => void;
+	onDiscussionPress?: (item: TAnyMessageModel) => void;
+	onThreadPress?: (item: TAnyMessageModel) => void;
+	errorActionsShow?: (item: TAnyMessageModel) => void;
+	replyBroadcast?: (item: TAnyMessageModel) => void;
+	reactionInit?: (item: TAnyMessageModel) => void;
+	fetchThreadName?: (tmid: string, id: string) => Promise<string | undefined>;
+	showAttachment: (file: IAttachment) => void;
+	onReactionLongPress?: (item: TAnyMessageModel) => void;
+	navToRoomInfo: (navParam: IRoomInfoParam) => void;
+	handleEnterCall?: () => void;
+	blockAction?: (params: { actionId: string; appId: string; value: string; blockId: string; rid: string; mid: string }) => void;
+	onAnswerButtonPress?: (message: string, tmid?: string, tshow?: boolean) => void;
+	threadBadgeColor?: string;
+	toggleFollowThread?: (isFollowingThread: boolean, tmid?: string) => Promise<void>;
+	jumpToMessage?: (link: string) => void;
+	onPress?: () => void;
+	theme: TSupportedThemes;
+	closeEmojiAndAction?: (action?: Function, params?: any) => void;
 }
 
-class MessageContainer extends React.Component<IMessageContainerProps, any> {
+interface IMessageContainerState {
+	isManualUnignored: boolean;
+}
+
+class MessageContainer extends React.Component<IMessageContainerProps, IMessageContainerState> {
 	static defaultProps = {
-		getCustomEmoji: () => {},
+		getCustomEmoji: () => null,
 		onLongPress: () => {},
-		onReactionPress: () => {},
-		onEncryptedPress: () => {},
-		onDiscussionPress: () => {},
-		onThreadPress: () => {},
-		onAnswerButtonPress: () => {},
-		errorActionsShow: () => {},
-		replyBroadcast: () => {},
-		reactionInit: () => {},
-		fetchThreadName: () => {},
-		showAttachment: () => {},
-		onReactionLongPress: () => {},
-		navToRoomInfo: () => {},
-		callJitsi: () => {},
 		blockAction: () => {},
 		archived: false,
 		broadcast: false,
 		isIgnored: false,
-		theme: 'light'
+		theme: 'light' as TSupportedThemes
 	};
 
 	state = { isManualUnignored: false };
 
-	private subscription: any;
+	private subscription?: Function;
 
 	componentDidMount() {
 		const { item } = this.props;
-		if (item && item.observe) {
-			const observable = item.observe();
-			this.subscription = observable.subscribe(() => {
+		// @ts-ignore
+		if (item && item.experimentalSubscribe) {
+			// TODO: Update watermelonDB to recognize experimentalSubscribe at types
+			// experimentalSubscribe(subscriber: (isDeleted: boolean) => void, debugInfo?: any): Unsubscribe
+			// @ts-ignore
+			this.subscription = item.experimentalSubscribe(() => {
 				this.forceUpdate();
 			});
 		}
 	}
 
-	shouldComponentUpdate(nextProps: any, nextState: any) {
+	shouldComponentUpdate(nextProps: IMessageContainerProps, nextState: IMessageContainerState) {
 		const { isManualUnignored } = this.state;
-		const { theme, threadBadgeColor, isIgnored, highlighted } = this.props;
-		if (nextProps.theme !== theme) {
-			return true;
-		}
+		const { threadBadgeColor, isIgnored, highlighted, previousItem } = this.props;
 		if (nextProps.highlighted !== highlighted) {
 			return true;
 		}
@@ -119,14 +107,27 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		if (nextState.isManualUnignored !== isManualUnignored) {
 			return true;
 		}
+		if (nextProps.previousItem?._id !== previousItem?._id) {
+			return true;
+		}
 		return false;
 	}
 
 	componentWillUnmount() {
-		if (this.subscription && this.subscription.unsubscribe) {
-			this.subscription.unsubscribe();
+		if (this.subscription) {
+			this.subscription();
 		}
 	}
+
+	onPressAction = () => {
+		const { closeEmojiAndAction } = this.props;
+
+		if (closeEmojiAndAction) {
+			return closeEmojiAndAction(this.onPress);
+		}
+
+		return this.onPress();
+	};
 
 	onPress = debounce(
 		() => {
@@ -144,6 +145,12 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 
 			if ((item.tlm || item.tmid) && !isThreadRoom) {
 				this.onThreadPress();
+			}
+
+			const { onDiscussionPress } = this.props;
+
+			if (item.dlm && onDiscussionPress) {
+				onDiscussionPress(item);
 			}
 		},
 		300,
@@ -167,7 +174,7 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		}
 	};
 
-	onReactionPress = (emoji: any) => {
+	onReactionPress = (emoji: string) => {
 		const { onReactionPress, item } = this.props;
 		if (onReactionPress) {
 			onReactionPress(emoji, item.id);
@@ -213,7 +220,7 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		this.setState({ isManualUnignored: true });
 	};
 
-	get isHeader() {
+	get isHeader(): boolean {
 		const { item, previousItem, broadcast, Message_GroupingPeriod } = this.props;
 		if (this.hasError || (previousItem && previousItem.status === messagesStatus.ERROR)) {
 			return true;
@@ -221,11 +228,15 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		try {
 			if (
 				previousItem &&
+				// @ts-ignore TODO: IMessage vs IMessageFromServer non-sense
 				previousItem.ts.toDateString() === item.ts.toDateString() &&
 				previousItem.u.username === item.u.username &&
 				!(previousItem.groupable === false || item.groupable === false || broadcast === true) &&
+				// @ts-ignore TODO: IMessage vs IMessageFromServer non-sense
 				item.ts - previousItem.ts < Message_GroupingPeriod * 1000 &&
-				previousItem.tmid === item.tmid
+				previousItem.tmid === item.tmid &&
+				item.t !== 'rm' &&
+				previousItem.t !== 'rm'
 			) {
 				return false;
 			}
@@ -235,7 +246,7 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		}
 	}
 
-	get isThreadReply() {
+	get isThreadReply(): boolean {
 		const { item, previousItem, isThreadRoom } = this.props;
 		if (isThreadRoom) {
 			return false;
@@ -246,37 +257,43 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		return false;
 	}
 
-	get isThreadSequential() {
+	get isThreadSequential(): boolean {
 		const { item, isThreadRoom } = this.props;
 		if (isThreadRoom) {
 			return false;
 		}
-		return item.tmid;
+		return !!item.tmid;
 	}
 
-	get isEncrypted() {
+	get isEncrypted(): boolean {
 		const { item } = this.props;
 		const { t, e2e } = item;
 		return t === E2E_MESSAGE_TYPE && e2e !== E2E_STATUS.DONE;
 	}
 
-	get isInfo() {
+	get isInfo(): string | boolean {
 		const { item } = this.props;
-		return SYSTEM_MESSAGES.includes(item.t);
+		if (['e2e', 'discussion-created', 'jitsi_call_started', 'videoconf'].includes(item.t)) {
+			return false;
+		}
+		return item.t;
 	}
 
-	get isTemp() {
+	get isTemp(): boolean {
 		const { item } = this.props;
 		return item.status === messagesStatus.TEMP || item.status === messagesStatus.ERROR;
 	}
 
-	get isIgnored() {
+	get isIgnored(): boolean {
 		const { isManualUnignored } = this.state;
 		const { isIgnored } = this.props;
-		return isManualUnignored ? false : isIgnored;
+		if (isManualUnignored) {
+			return false;
+		}
+		return isIgnored ?? false;
 	}
 
-	get hasError() {
+	get hasError(): boolean {
 		const { item } = this.props;
 		return item.status === messagesStatus.ERROR;
 	}
@@ -295,10 +312,10 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 		}
 	};
 
-	onLinkPress = (link: any) => {
-		const { item, theme, jumpToMessage } = this.props;
-		const isMessageLink = item?.attachments?.findIndex((att: any) => att?.message_link === link) !== -1;
-		if (isMessageLink) {
+	onLinkPress = (link: string): void => {
+		const { item, jumpToMessage, theme } = this.props;
+		const isMessageLink = item?.attachments?.findIndex((att: IAttachment) => att?.message_link === link) !== -1;
+		if (isMessageLink && jumpToMessage) {
 			return jumpToMessage(link);
 		}
 		openLink(link, theme);
@@ -322,10 +339,9 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 			navToRoomInfo,
 			getCustomEmoji,
 			isThreadRoom,
-			callJitsi,
+			handleEnterCall,
 			blockAction,
 			rid,
-			theme,
 			threadBadgeColor,
 			toggleFollowThread,
 			jumpToMessage,
@@ -358,14 +374,18 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 			blocks,
 			autoTranslate: autoTranslateMessage,
 			replies,
-			md
+			md,
+			comment
 		} = item;
 
 		let message = msg;
+		let isTranslated = false;
 		// "autoTranslateRoom" and "autoTranslateLanguage" are properties from the subscription
 		// "autoTranslateMessage" is a toggle between "View Original" and "Translate" state
-		if (autoTranslateRoom && autoTranslateMessage) {
-			message = getMessageTranslation(item, autoTranslateLanguage) || message;
+		if (autoTranslateRoom && autoTranslateMessage && autoTranslateLanguage) {
+			const messageTranslated = getMessageTranslation(item, autoTranslateLanguage);
+			isTranslated = !!messageTranslated;
+			message = messageTranslated || message;
 		}
 
 		return (
@@ -373,7 +393,7 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 				value={{
 					user,
 					baseUrl,
-					onPress: this.onPress,
+					onPress: this.onPressAction,
 					onLongPress: this.onLongPress,
 					reactionInit: this.reactionInit,
 					onErrorPress: this.onErrorPress,
@@ -388,7 +408,9 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 					threadBadgeColor,
 					toggleFollowThread,
 					replies
-				}}>
+				}}
+			>
+				{/* @ts-ignore*/}
 				<Message
 					id={id}
 					msg={message}
@@ -402,7 +424,6 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 					urls={urls}
 					reactions={reactions}
 					alias={alias}
-					/* @ts-ignore*/
 					avatar={avatar}
 					emoji={emoji}
 					timeFormat={timeFormat}
@@ -424,7 +445,7 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 					mentions={mentions}
 					channels={channels}
 					isIgnored={this.isIgnored}
-					isEdited={editedBy && !!editedBy.username}
+					isEdited={(editedBy && !!editedBy.username) ?? false}
 					isHeader={this.isHeader}
 					isThreadReply={this.isThreadReply}
 					isThreadSequential={this.isThreadSequential}
@@ -436,10 +457,11 @@ class MessageContainer extends React.Component<IMessageContainerProps, any> {
 					showAttachment={showAttachment}
 					getCustomEmoji={getCustomEmoji}
 					navToRoomInfo={navToRoomInfo}
-					callJitsi={callJitsi}
+					handleEnterCall={handleEnterCall}
 					blockAction={blockAction}
-					theme={theme}
 					highlighted={highlighted}
+					comment={comment}
+					isTranslated={isTranslated}
 				/>
 			</MessageContext.Provider>
 		);

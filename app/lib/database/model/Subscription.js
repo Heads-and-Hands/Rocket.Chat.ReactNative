@@ -3,10 +3,10 @@ import { children, date, field, json } from '@nozbe/watermelondb/decorators';
 
 import { sanitizer } from '../utils';
 
-export const TABLE_NAME = 'subscriptions';
+export const SUBSCRIPTIONS_TABLE = 'subscriptions';
 
 export default class Subscription extends Model {
-	static table = TABLE_NAME;
+	static table = SUBSCRIPTIONS_TABLE;
 
 	static associations = {
 		messages: { type: 'has_many', foreignKey: 'rid' },
@@ -28,6 +28,8 @@ export default class Subscription extends Model {
 	@field('name') name;
 
 	@field('fname') fname;
+
+	@field('sanitized_fname') sanitizedFname;
 
 	@field('rid') rid;
 
@@ -103,6 +105,8 @@ export default class Subscription extends Model {
 
 	@field('hide_unread_status') hideUnreadStatus;
 
+	@field('hide_mention_status') hideMentionStatus;
+
 	@json('sys_mes', sanitizer) sysMes;
 
 	@json('uids', sanitizer) uids;
@@ -121,6 +125,8 @@ export default class Subscription extends Model {
 
 	@field('e2e_key') E2EKey;
 
+	@field('e2e_suggested_key') E2ESuggestedKey;
+
 	@field('encrypted') encrypted;
 
 	@field('e2e_key_id') e2eKeyId;
@@ -130,4 +136,10 @@ export default class Subscription extends Model {
 	@field('team_id') teamId;
 
 	@field('team_main') teamMain;
+
+	@field('on_hold') onHold;
+
+	@field('users_count') usersCount;
+
+	@json('source', sanitizer) source;
 }

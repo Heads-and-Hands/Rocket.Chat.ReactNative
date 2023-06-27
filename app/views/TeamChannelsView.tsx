@@ -1,43 +1,37 @@
+import { Q } from '@nozbe/watermelondb';
+import { StackNavigationOptions } from '@react-navigation/stack';
+import { HeaderBackButton } from '@react-navigation/elements';
 import React from 'react';
 import { Alert, FlatList, Keyboard } from 'react-native';
-import { RouteProp } from '@react-navigation/native';
-import { Dispatch } from 'redux';
-import { Q } from '@nozbe/watermelondb';
-import { EdgeInsets, withSafeAreaInsets } from 'react-native-safe-area-context';
 import { connect } from 'react-redux';
-import { HeaderBackButton, StackNavigationOptions, StackNavigationProp } from '@react-navigation/stack';
 
-import StatusBar from '../containers/StatusBar';
-import RoomHeader from '../containers/RoomHeader';
-import { withTheme } from '../theme';
-import log, { events, logEvent } from '../utils/log';
-import database from '../lib/database';
-import { getUserSelector } from '../selectors/login';
-import { getHeaderTitlePosition } from '../containers/Header';
-import * as HeaderButton from '../containers/HeaderButton';
-import BackgroundContainer from '../containers/BackgroundContainer';
-import SafeAreaView from '../containers/SafeAreaView';
+import { deleteRoom } from '../actions/room';
+import { DisplayMode, themes } from '../lib/constants';
+import { TActionSheetOptions, TActionSheetOptionsItem, withActionSheet } from '../containers/ActionSheet';
 import ActivityIndicator from '../containers/ActivityIndicator';
+import BackgroundContainer from '../containers/BackgroundContainer';
+import * as HeaderButton from '../containers/HeaderButton';
+import RoomHeader from '../containers/RoomHeader';
+import SafeAreaView from '../containers/SafeAreaView';
 import SearchHeader from '../containers/SearchHeader';
-import RoomItem, { ROW_HEIGHT } from '../presentation/RoomItem';
-import RocketChat from '../lib/rocketchat';
+import StatusBar from '../containers/StatusBar';
+import { IApplicationState, IBaseScreen, TSubscriptionModel } from '../definitions';
+import { ERoomType } from '../definitions/ERoomType';
 import { withDimensions } from '../dimensions';
-import { isIOS } from '../utils/deviceInfo';
-import debounce from '../utils/debounce';
-import { showErrorAlert } from '../utils/info';
-import { goRoom } from '../utils/goRoom';
 import I18n from '../i18n';
-import { withActionSheet } from '../containers/ActionSheet';
-import { deleteRoom as deleteRoomAction } from '../actions/room';
-import { CustomIcon } from '../lib/Icons';
-import { themes } from '../constants/colors';
+import database from '../lib/database';
+import { CustomIcon } from '../containers/CustomIcon';
+import RoomItem, { ROW_HEIGHT } from '../containers/RoomItem';
+import { getUserSelector } from '../selectors/login';
+import { ChatsStackParamList } from '../stacks/types';
+import { withTheme } from '../theme';
+import { goRoom } from '../lib/methods/helpers/goRoom';
+import { showErrorAlert } from '../lib/methods/helpers/info';
+import log, { events, logEvent } from '../lib/methods/helpers/log';
+import { getRoomAvatar, getRoomTitle, hasPermission, debounce, isIOS } from '../lib/methods/helpers';
+import { Services } from '../lib/services';
 
 const API_FETCH_COUNT = 25;
-const PERMISSION_DELETE_C = 'delete-c';
-const PERMISSION_DELETE_P = 'delete-p';
-const PERMISSION_EDIT_TEAM_CHANNEL = 'edit-team-channel';
-const PERMISSION_REMOVE_TEAM_CHANNEL = 'remove-team-channel';
-const PERMISSION_ADD_TEAM_CHANNEL = 'add-team-channel';
 
 const getItemLayout = (data: IItem[] | null | undefined, index: number) => ({
 	length: data?.length || 0,
@@ -46,9 +40,8 @@ const getItemLayout = (data: IItem[] | null | undefined, index: number) => ({
 });
 const keyExtractor = (item: IItem) => item._id;
 
-// This interface comes from request RocketChat.getTeamListRoom
-interface IItem {
-	_id: string;
+export interface IItem {
+	_id: ERoomType;
 	fname: string;
 	customFields: object;
 	broadcast: boolean;
@@ -78,12 +71,7 @@ interface ITeamChannelsViewState {
 	showCreate: boolean;
 }
 
-interface ITeamChannelsViewProps {
-	route: RouteProp<{ TeamChannelsView: { teamId: string } }, 'TeamChannelsView'>;
-	navigation: StackNavigationProp<any, 'TeamChannelsView'>;
-	isMasterDetail: boolean;
-	insets: EdgeInsets;
-	theme: string;
+interface ITeamChannelsViewProps extends IBaseScreen<ChatsStackParamList, 'TeamChannelsView'> {
 	useRealName: boolean;
 	width: number;
 	StoreLastMessage: boolean;
@@ -92,22 +80,21 @@ interface ITeamChannelsViewProps {
 	removeTeamChannelPermission: string[];
 	deleteCPermission: string[];
 	deletePPermission: string[];
-	showActionSheet: (options: any) => void;
-	deleteRoom: (rid: string, t: string) => void;
+	showActionSheet: (options: TActionSheetOptions) => void;
 	showAvatar: boolean;
-	displayMode: string;
+	displayMode: DisplayMode;
 }
 class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChannelsViewState> {
 	private teamId: string;
-
-	// TODO: Refactor when migrate room
-	private teamChannels: any;
-
-	// TODO: Refactor when migrate room
-	private team: any;
+	private joined: boolean;
+	private teamChannels: TSubscriptionModel[];
+	private team: TSubscriptionModel;
 
 	constructor(props: ITeamChannelsViewProps) {
 		super(props);
+		this.teamChannels = [];
+		this.team = {} as TSubscriptionModel;
+		this.joined = props.route.params?.joined;
 		this.teamId = props.route.params?.teamId;
 		this.state = {
 			loading: true,
@@ -134,15 +121,15 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 		const db = database.active;
 		try {
 			const subCollection = db.get('subscriptions');
-			this.teamChannels = await subCollection.query(Q.where('team_id', Q.eq(this.teamId)));
-			this.team = this.teamChannels?.find((channel: any) => channel.teamMain);
+			this.teamChannels = await subCollection.query(Q.where('team_id', Q.eq(this.teamId))).fetch();
+			this.team = this.teamChannels?.find((channel: TSubscriptionModel) => channel.teamMain) as TSubscriptionModel;
 			this.setHeader();
 
 			if (!this.team) {
 				throw new Error();
 			}
 
-			const permissions = await RocketChat.hasPermission([addTeamChannelPermission], this.team.rid);
+			const permissions = await hasPermission([addTeamChannelPermission], this.team.rid);
 			if (permissions[0]) {
 				this.setState({ showCreate: true }, () => this.setHeader());
 			}
@@ -167,7 +154,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 
 		this.setState({ loadingMore: true });
 		try {
-			const result = await RocketChat.getTeamListRoom({
+			const result = await Services.getTeamListRoom({
 				teamId: this.teamId,
 				offset: length,
 				count: API_FETCH_COUNT,
@@ -183,9 +170,9 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 				} as ITeamChannelsViewState;
 
 				if (isSearching) {
-					newState.search = [...search, ...result.rooms];
+					newState.search = [...search, ...result.rooms] as IItem[];
 				} else {
-					newState.data = [...data, ...result.rooms];
+					newState.data = [...data, ...result.rooms] as IItem[];
 				}
 
 				this.setState(newState);
@@ -200,51 +187,58 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 
 	setHeader = () => {
 		const { isSearching, showCreate, data } = this.state;
-		const { navigation, isMasterDetail, insets, theme } = this.props;
+		const { navigation, isMasterDetail, theme } = this.props;
 
 		const { team } = this;
 		if (!team) {
 			return;
 		}
 
-		const headerTitlePosition = getHeaderTitlePosition({ insets, numIconsRight: 2 });
-
 		if (isSearching) {
 			const options: StackNavigationOptions = {
 				headerTitleAlign: 'left',
+				headerTitleContainerStyle: { flex: 1, marginHorizontal: 0, marginRight: 15, maxWidth: undefined },
+				headerRightContainerStyle: { flexGrow: 0 },
 				headerLeft: () => (
 					<HeaderButton.Container left>
 						<HeaderButton.Item iconName='close' onPress={this.onCancelSearchPress} />
 					</HeaderButton.Container>
 				),
-				headerTitle: () => <SearchHeader onSearchChangeText={this.onSearchChangeText} />,
-				headerTitleContainerStyle: {
-					left: headerTitlePosition.left,
-					right: headerTitlePosition.right
-				},
+				headerTitle: () => (
+					<SearchHeader onSearchChangeText={this.onSearchChangeText} testID='team-channels-view-search-header' />
+				),
 				headerRight: () => null
 			};
 			return navigation.setOptions(options);
 		}
 
 		const options: StackNavigationOptions = {
-			headerShown: true,
 			headerTitleAlign: 'left',
-			headerTitleContainerStyle: {
-				left: headerTitlePosition.left,
-				right: headerTitlePosition.right
-			},
+			headerTitleContainerStyle: { flex: 1, marginLeft: 0, marginRight: 4, maxWidth: undefined },
+			headerLeftContainerStyle: { minWidth: 60 },
+			headerRightContainerStyle: { flexGrow: undefined, flexBasis: undefined },
 			headerLeft: () => (
-				<HeaderBackButton labelVisible={false} onPress={() => navigation.pop()} tintColor={themes[theme].headerTintColor} />
+				<HeaderBackButton
+					labelVisible={false}
+					onPress={() => navigation.pop()}
+					tintColor={themes[theme].headerTintColor}
+					testID='header-back'
+				/>
 			),
 			headerTitle: () => (
-				<RoomHeader
-					title={RocketChat.getRoomTitle(team)}
-					subtitle={team.topic}
-					type={team.t}
-					onPress={this.goRoomActionsView}
-					teamMain
-				/>
+				<RoomHeader title={getRoomTitle(team)} subtitle={team.topic} type={team.t} onPress={this.goRoomActionsView} teamMain />
+			),
+			headerRight: () => (
+				<HeaderButton.Container>
+					{showCreate ? (
+						<HeaderButton.Item
+							iconName='create'
+							testID='team-channels-view-create'
+							onPress={() => navigation.navigate('AddChannelTeamView', { teamId: this.teamId, teamChannels: data })}
+						/>
+					) : null}
+					<HeaderButton.Item iconName='search' testID='team-channels-view-search' onPress={this.onSearchPress} />
+				</HeaderButton.Container>
 			)
 		};
 
@@ -252,18 +246,6 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 			options.headerLeft = () => <HeaderButton.CloseModal navigation={navigation} />;
 		}
 
-		options.headerRight = () => (
-			<HeaderButton.Container>
-				{showCreate ? (
-					<HeaderButton.Item
-						iconName='create'
-						testID='team-channels-view-create'
-						onPress={() => navigation.navigate('AddChannelTeamView', { teamId: this.teamId, teamChannels: data })}
-					/>
-				) : null}
-				<HeaderButton.Item iconName='search' testID='team-channels-view-search' onPress={this.onSearchPress} />
-			</HeaderButton.Container>
-		);
 		navigation.setOptions(options);
 	};
 
@@ -312,48 +294,48 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 
 	goRoomActionsView = (screen: string) => {
 		logEvent(events.TC_GO_ACTIONS);
-		const { team } = this;
+		const { team, joined } = this;
 		const { navigation, isMasterDetail } = this.props;
-		if (isMasterDetail) {
+		if (!team) {
+			return;
+		}
+		if (isMasterDetail && screen) {
 			navigation.navigate('ModalStackNavigator', {
-				screen: screen ?? 'RoomActionsView',
+				screen: 'RoomActionsView',
 				params: {
 					rid: team.rid,
 					t: team.t,
 					room: team,
-					showCloseModal: false
+					joined
 				}
 			});
 		} else {
 			navigation.navigate('RoomActionsView', {
 				rid: team.rid,
 				t: team.t,
-				room: team
+				room: team,
+				joined
 			});
 		}
 	};
 
-	getRoomTitle = (item: IItem) => RocketChat.getRoomTitle(item);
-
-	getRoomAvatar = (item: IItem) => RocketChat.getRoomAvatar(item);
-
 	onPressItem = debounce(
 		async (item: IItem) => {
 			logEvent(events.TC_GO_ROOM);
-			const { navigation, isMasterDetail } = this.props;
+			const { isMasterDetail } = this.props;
 			try {
-				const { room } = await RocketChat.getRoomInfo(item._id);
-				const params = {
-					rid: item._id,
-					name: RocketChat.getRoomTitle(room),
-					joinCodeRequired: room.joinCodeRequired,
-					t: room.t,
-					teamId: room.teamId
-				};
-				if (isMasterDetail) {
-					navigation.pop();
+				let params = {};
+				const result = await Services.getRoomInfo(item._id);
+				if (result.success) {
+					params = {
+						rid: item._id,
+						name: getRoomTitle(result.room),
+						joinCodeRequired: result.room.joinCodeRequired,
+						t: result.room.t,
+						teamId: result.room.teamId
+					};
 				}
-				goRoom({ item: params, isMasterDetail, navigationMethod: navigation.push });
+				goRoom({ item: params, isMasterDetail, popToRoot: !!isMasterDetail });
 			} catch (e: any) {
 				if (e.data.error === 'not-allowed') {
 					showErrorAlert(I18n.t('error-not-allowed'));
@@ -370,7 +352,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 		logEvent(events.TC_TOGGLE_AUTOJOIN);
 		try {
 			const { data } = this.state;
-			const result = await RocketChat.updateTeamRoom({ roomId: item._id, isDefault: !item.teamDefault });
+			const result = await Services.updateTeamRoom({ roomId: item._id, isDefault: !item.teamDefault });
 			if (result.success) {
 				const newData = data.map(i => {
 					if (i._id === item._id) {
@@ -409,7 +391,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 		logEvent(events.TC_DELETE_ROOM);
 		try {
 			const { data } = this.state;
-			const result = await RocketChat.removeTeamRoom({ roomId: item._id, teamId: this.team.teamId });
+			const result = await Services.removeTeamRoom({ roomId: item._id, teamId: this.team.teamId as string });
 			if (result.success) {
 				const newData = data.filter(room => result.room._id !== room._id);
 				this.setState({ data: newData });
@@ -422,7 +404,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 
 	delete = (item: IItem) => {
 		logEvent(events.TC_DELETE_ROOM);
-		const { deleteRoom } = this.props;
+		const { dispatch } = this.props;
 
 		Alert.alert(
 			I18n.t('Are_you_sure_question_mark'),
@@ -435,7 +417,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 				{
 					text: I18n.t('Yes_action_it', { action: I18n.t('delete') }),
 					style: 'destructive',
-					onPress: () => deleteRoom(item._id, item.t)
+					onPress: () => dispatch(deleteRoom(ERoomType.c, item))
 				}
 			],
 			{ cancelable: false }
@@ -456,9 +438,9 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 		const autoJoinIcon = isAutoJoinChecked ? 'checkbox-checked' : 'checkbox-unchecked';
 		const autoJoinIconColor = isAutoJoinChecked ? themes[theme].tintActive : themes[theme].auxiliaryTintColor;
 
-		const options = [];
+		const options: TActionSheetOptionsItem[] = [];
 
-		const permissionsTeam = await RocketChat.hasPermission([editTeamChannelPermission], this.team.rid);
+		const permissionsTeam = await hasPermission([editTeamChannelPermission], this.team.rid);
 		if (permissionsTeam[0]) {
 			options.push({
 				title: I18n.t('Auto-join'),
@@ -476,7 +458,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 			});
 		}
 
-		const permissionsRemoveTeam = await RocketChat.hasPermission([removeTeamChannelPermission], this.team.rid);
+		const permissionsRemoveTeam = await hasPermission([removeTeamChannelPermission], this.team.rid);
 		if (permissionsRemoveTeam[0]) {
 			options.push({
 				title: I18n.t('Remove_from_Team'),
@@ -487,7 +469,7 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 			});
 		}
 
-		const permissionsChannel = await RocketChat.hasPermission([item.t === 'c' ? deleteCPermission : deletePPermission], item._id);
+		const permissionsChannel = await hasPermission([item.t === 'c' ? deleteCPermission : deletePPermission], item._id);
 		if (permissionsChannel[0]) {
 			options.push({
 				title: I18n.t('Delete'),
@@ -505,19 +487,17 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 	};
 
 	renderItem = ({ item }: { item: IItem }) => {
-		const { StoreLastMessage, useRealName, theme, width, showAvatar, displayMode } = this.props;
+		const { StoreLastMessage, useRealName, width, showAvatar, displayMode } = this.props;
 		return (
 			<RoomItem
 				item={item}
-				theme={theme}
-				type={item.t}
 				showLastMessage={StoreLastMessage}
 				onPress={this.onPressItem}
 				width={width}
 				onLongPress={this.showChannelActions}
 				useRealName={useRealName}
-				getRoomTitle={this.getRoomTitle}
-				getRoomAvatar={this.getRoomAvatar}
+				getRoomTitle={getRoomTitle}
+				getRoomAvatar={getRoomAvatar}
 				swipeEnabled={false}
 				autoJoin={item.teamDefault}
 				showAvatar={showAvatar}
@@ -528,9 +508,8 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 
 	renderFooter = () => {
 		const { loadingMore } = this.state;
-		const { theme } = this.props;
 		if (loadingMore) {
-			return <ActivityIndicator theme={theme} />;
+			return <ActivityIndicator />;
 		}
 		return null;
 	};
@@ -574,26 +553,19 @@ class TeamChannelsView extends React.Component<ITeamChannelsViewProps, ITeamChan
 	}
 }
 
-const mapStateToProps = (state: any) => ({
+const mapStateToProps = (state: IApplicationState) => ({
 	baseUrl: state.server.server,
 	user: getUserSelector(state),
 	useRealName: state.settings.UI_Use_Real_Name,
 	isMasterDetail: state.app.isMasterDetail,
 	StoreLastMessage: state.settings.Store_Last_Message,
-	addTeamChannelPermission: state.permissions[PERMISSION_ADD_TEAM_CHANNEL],
-	editTeamChannelPermission: state.permissions[PERMISSION_EDIT_TEAM_CHANNEL],
-	removeTeamChannelPermission: state.permissions[PERMISSION_REMOVE_TEAM_CHANNEL],
-	deleteCPermission: state.permissions[PERMISSION_DELETE_C],
-	deletePPermission: state.permissions[PERMISSION_DELETE_P],
+	addTeamChannelPermission: state.permissions['add-team-channel'],
+	editTeamChannelPermission: state.permissions['edit-team-channel'],
+	removeTeamChannelPermission: state.permissions['remove-team-channel'],
+	deleteCPermission: state.permissions['delete-c'],
+	deletePPermission: state.permissions['delete-p'],
 	showAvatar: state.sortPreferences.showAvatar,
 	displayMode: state.sortPreferences.displayMode
 });
 
-const mapDispatchToProps = (dispatch: Dispatch) => ({
-	deleteRoom: (rid: string, t: string) => dispatch(deleteRoomAction(rid, t))
-});
-
-export default connect(
-	mapStateToProps,
-	mapDispatchToProps
-)(withDimensions(withSafeAreaInsets(withTheme(withActionSheet(TeamChannelsView)))));
+export default connect(mapStateToProps)(withDimensions(withTheme(withActionSheet(TeamChannelsView))));
