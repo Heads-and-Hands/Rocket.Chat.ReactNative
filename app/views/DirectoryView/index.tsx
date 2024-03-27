@@ -139,7 +139,7 @@ class DirectoryView extends React.Component<IDirectoryViewProps, IDirectoryViewS
 		} else if (type === 'teams') {
 			logEvent(events.DIRECTORY_SEARCH_TEAMS);
 		}
-		this.toggleDropdown()
+		this.toggleDropdown();
 	};
 
 	toggleWorkspace = () => {
@@ -315,7 +315,6 @@ class DirectoryView extends React.Component<IDirectoryViewProps, IDirectoryViewS
 				/>
 				{showOptionsDropdown ? (
 					<Options
-						theme={theme}
 						type={type}
 						globalUsers={globalUsers}
 						close={this.toggleDropdown}

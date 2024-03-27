@@ -25,7 +25,7 @@ import { IAvatar } from '../../definitions';
 import AvatarSuggestion from './AvatarSuggestion';
 import log from '../../lib/methods/helpers/log';
 import { changeRoomsAvatar, changeUserAvatar, resetUserAvatar } from './submitServices';
-import ImagePicker, { Image } from './ImagePicker';
+import ImagePicker, { Image } from '../../lib/methods/helpers/ImagePicker/ImagePicker';
 
 enum AvatarStateActions {
 	CHANGE_AVATAR = 'CHANGE_AVATAR',
@@ -130,7 +130,7 @@ const ChangeAvatarView = () => {
 		return navigation.goBack();
 	};
 
-	const pickImage = async () => {
+	const pickImage = async (isCam = false) => {
 		const options = {
 			cropping: true,
 			compressImageQuality: 0.8,
@@ -141,13 +141,18 @@ const ChangeAvatarView = () => {
 			includeBase64: true
 		};
 		try {
-			const response: Image = await ImagePicker.openPicker(options);
+			const response: Image =
+				isCam === true
+					? await ImagePicker.openCamera({ ...options, useFrontCamera: true })
+					: await ImagePicker.openPicker(options);
 			dispatchAvatar({
 				type: AvatarStateActions.CHANGE_AVATAR,
 				payload: { url: response.path, data: `data:image/jpeg;base64,${response.data}`, service: 'upload' }
 			});
-		} catch (error) {
-			log(error);
+		} catch (error: any) {
+			if (error?.code !== 'E_PICKER_CANCELLED') {
+				log(error);
+			}
 		}
 	};
 
@@ -157,15 +162,13 @@ const ChangeAvatarView = () => {
 		<KeyboardView
 			style={{ backgroundColor: colors.auxiliaryBackground }}
 			contentContainerStyle={sharedStyles.container}
-			keyboardVerticalOffset={128}
-		>
+			keyboardVerticalOffset={128}>
 			<StatusBar />
 			<SafeAreaView testID='change-avatar-view'>
 				<ScrollView
 					contentContainerStyle={sharedStyles.containerScrollView}
 					testID='change-avatar-view-list'
-					{...scrollPersistTaps}
-				>
+					{...scrollPersistTaps}>
 					<View style={styles.avatarContainer} testID='change-avatar-view-avatar'>
 						{deletingRoomAvatar ? (
 							<AvatarPresentational
@@ -215,6 +218,14 @@ const ChangeAvatarView = () => {
 							}
 						/>
 					) : null}
+					<Button
+						title={I18n.t('Take_a_photo')}
+						type='secondary'
+						disabled={saving}
+						backgroundColor={colors.editAndUploadButtonAvatar}
+						onPress={() => pickImage(true)}
+						testID='change-avatar-view-take-a-photo'
+					/>
 					<Button
 						title={I18n.t('Upload_image')}
 						type='secondary'

@@ -48,6 +48,7 @@ interface IThreadMessagesViewState {
 	currentFilter: Filter;
 	isSearching: boolean;
 	searchText: string;
+	offset: number;
 }
 
 interface IThreadMessagesViewProps extends IBaseScreen<ChatsStackParamList, 'ThreadMessagesView'> {
@@ -85,7 +86,8 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 			showFilterDropdown: false,
 			currentFilter: Filter.All,
 			isSearching: false,
-			searchText: ''
+			searchText: '',
+			offset: 0
 		};
 		this.setHeader();
 		this.initSubscription();
@@ -131,6 +133,7 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 		const options: StackNavigationOptions = {
 			headerTitleAlign: 'center',
 			headerTitle: I18n.t('Threads'),
+			headerTitleContainerStyle: {},
 			headerRightContainerStyle: { flexGrow: 1 },
 			headerLeft: () => (
 				<HeaderBackButton
@@ -307,7 +310,7 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 
 	// eslint-disable-next-line react/sort-comp
 	load = debounce(async (lastThreadSync: Date) => {
-		const { loading, end, messages, searchText } = this.state;
+		const { loading, end, searchText, offset } = this.state;
 		if (end || loading || !this.mounted) {
 			return;
 		}
@@ -318,14 +321,15 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 			const result = await Services.getThreadsList({
 				rid: this.rid,
 				count: API_FETCH_COUNT,
-				offset: messages.length,
+				offset,
 				text: searchText
 			});
 			if (result.success) {
 				this.updateThreads({ update: result.threads, lastThreadSync });
 				this.setState({
 					loading: false,
-					end: result.count < API_FETCH_COUNT
+					end: result.count < API_FETCH_COUNT,
+					offset: offset + API_FETCH_COUNT
 				});
 			}
 		} catch (e) {
@@ -424,7 +428,7 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 	onFilterSelected = (filter: Filter) => {
 		const { messages, subscription } = this.state;
 		const displayingThreads = this.getFilteredThreads(messages, subscription, filter);
-		this.setState({ currentFilter: filter, displayingThreads });
+		this.setState({ currentFilter: filter, displayingThreads, showFilterDropdown: false });
 	};
 
 	toggleFollowThread = async (isFollowingThread: boolean, tmid: string) => {
@@ -512,19 +516,13 @@ class ThreadMessagesView extends React.Component<IThreadMessagesViewProps, IThre
 	render() {
 		console.count(`${this.constructor.name}.render calls`);
 		const { showFilterDropdown, currentFilter } = this.state;
-		const { theme } = this.props;
 
 		return (
 			<SafeAreaView testID='thread-messages-view'>
 				<StatusBar />
 				{this.renderContent()}
 				{showFilterDropdown ? (
-					<Dropdown
-						currentFilter={currentFilter}
-						onFilterSelected={this.onFilterSelected}
-						onClose={this.closeFilterDropdown}
-						theme={theme}
-					/>
+					<Dropdown currentFilter={currentFilter} onFilterSelected={this.onFilterSelected} onClose={this.closeFilterDropdown} />
 				) : null}
 			</SafeAreaView>
 		);
