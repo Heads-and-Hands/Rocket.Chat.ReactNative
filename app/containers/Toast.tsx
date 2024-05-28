@@ -13,8 +13,9 @@ const styles = StyleSheet.create({
 	},
 	text: {
 		fontSize: 14,
-		...sharedStyles.textRegular,
-		...sharedStyles.textAlignCenter
+		// jest error: TypeError: Cannot read property 'textRegular' of undefined
+		...sharedStyles?.textRegular,
+		...sharedStyles?.textAlignCenter
 	}
 });
 
@@ -46,8 +47,8 @@ const Toast = (): React.ReactElement => {
 			ref={getToastRef}
 			// @ts-ignore
 			position='center'
-			style={[styles.toast, { backgroundColor: colors.toastBackground }]}
-			textStyle={[styles.text, { color: colors.buttonText }]}
+			style={[styles.toast, { backgroundColor: colors.surfaceDark }]}
+			textStyle={[styles.text, { color: colors.fontWhite }]}
 			opacity={0.9}
 		/>
 	);

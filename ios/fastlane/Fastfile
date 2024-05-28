@@ -18,6 +18,13 @@ platform :ios do
 
     increment_build_number
 
+    update_code_signing_settings(
+      profile_name: "match AppStore chat.rocket.ios.watchkitapp",
+      build_configurations: "Release",
+      code_sign_identity: "iPhone Distribution",
+      targets: "Rocket.Chat.Watch",
+    )
+
     gym(
       workspace: 'RocketChatRN.xcworkspace',
       scheme: 'RocketChat',
